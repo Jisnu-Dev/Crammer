@@ -9,7 +9,7 @@ from app.core.database import get_db
 
 def get_db_session() -> Generator[Session, None, None]:
     """Get database session dependency"""
-    return get_db()
+    yield from get_db()
 
 
 # Add more dependencies as needed
