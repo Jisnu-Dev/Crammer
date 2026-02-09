@@ -6,10 +6,21 @@ export default function AuthLayout() {
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: '#FFFFFF' },
+        gestureEnabled: false, // Disable swipe back gesture
       }}
     >
-      <Stack.Screen name="signup" />
-      <Stack.Screen name="login" />
+      <Stack.Screen 
+        name="signup" 
+        options={{
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen 
+        name="login"
+        options={{
+          gestureEnabled: false,
+        }}
+      />
     </Stack>
   );
 }

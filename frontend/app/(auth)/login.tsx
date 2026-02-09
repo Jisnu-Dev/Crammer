@@ -16,9 +16,10 @@ import { CustomInput } from '../../components/common/CustomInput';
 import { CustomButton } from '../../components/common/CustomButton';
 import { Colors, Spacing, BorderRadius, Typography } from '../../constants/styles/theme';
 import { apiService } from '../../services/api';
-import { storeTokens, storeUser } from '../../utils/auth';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function LoginScreen() {
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -58,11 +59,8 @@ export default function LoginScreen() {
       if (response.success && response.data) {
         const { token, user } = response.data;
         
-        // Store tokens and user data
-        await storeTokens(token);
-        await storeUser(user);
-        
-        console.log('User logged in:', user);
+        // Login user through context
+        await login(user, token);
         
         // Navigate to main app
         router.replace('/(tabs)');

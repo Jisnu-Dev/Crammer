@@ -17,7 +17,7 @@ import { CustomButton } from '../../components/common/CustomButton';
 import { CustomDropdown, DropdownOption } from '../../components/common/CustomDropdown';
 import { Colors, Spacing, BorderRadius, Typography } from '../../constants/styles/theme';
 import { apiService } from '../../services/api';
-import { storeTokens, storeUser } from '../../utils/auth';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface FormData {
   fullName: string;
@@ -42,6 +42,7 @@ const roleOptions: DropdownOption[] = [
 ];
 
 export default function SignUpScreen() {
+  const { login } = useAuth();
   const [formData, setFormData] = useState<FormData>({
     fullName: '',
     email: '',
@@ -121,11 +122,8 @@ export default function SignUpScreen() {
       if (response.success && response.data) {
         const { token, user } = response.data;
         
-        // Store tokens and user data
-        await storeTokens(token);
-        await storeUser(user);
-        
-        console.log('User registered:', user);
+        // Login user through context
+        await login(user, token);
         
         Alert.alert(
           'Success!',
