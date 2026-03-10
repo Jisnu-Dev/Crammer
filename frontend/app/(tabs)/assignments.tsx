@@ -1,148 +1,230 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
+  Platform,
+  StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
+import { getAccessToken } from '../../utils/auth';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/styles/theme';
 
-interface Assignment {
-  id: number;
-  title: string;
-  course: string;
-  dueDate: string;
-  status: 'pending' | 'submitted' | 'graded' | 'overdue';
-  grade?: string;
-  maxGrade?: string;
-  priority: 'high' | 'medium' | 'low';
-  description: string;
-}
+const getBaseUrl = () => {
+  if (__DEV__) {
+    if (Platform.OS === 'android') return `http://10.123.11.99:8000/api/v1`;
+    return 'http://localhost:8000/api/v1';
+  }
+  return 'https://your-production-api.com/api/v1';
+};
+const API_BASE_URL = getBaseUrl();
 
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  { id: 1, title: 'Chapter 5 Problem Set', course: 'Advanced Mathematics', dueDate: 'Feb 18, 2026', status: 'pending', priority: 'high', description: 'Complete problems 1-20 from Chapter 5' },
-  { id: 2, title: 'Lab Report: Thermodynamics', course: 'Physics Fundamentals', dueDate: 'Feb 20, 2026', status: 'pending', priority: 'medium', description: 'Write a detailed lab report on the thermodynamics experiment' },
-  { id: 3, title: 'Reaction Mechanisms Essay', course: 'Organic Chemistry', dueDate: 'Feb 15, 2026', status: 'submitted', priority: 'low', description: 'Essay on SN1 and SN2 reaction mechanisms' },
-  { id: 4, title: 'Binary Tree Implementation', course: 'Data Structures', dueDate: 'Feb 22, 2026', status: 'pending', priority: 'high', description: 'Implement AVL tree with all rotations' },
-  { id: 5, title: 'Poetry Analysis', course: 'English Literature', dueDate: 'Feb 10, 2026', status: 'graded', grade: '92', maxGrade: '100', priority: 'low', description: 'Analyze the poem "The Road Not Taken"' },
-  { id: 6, title: 'Integration Quiz', course: 'Advanced Mathematics', dueDate: 'Feb 12, 2026', status: 'overdue', priority: 'high', description: 'Online quiz on integration techniques' },
-];
+interface SubjectGroup {
+  plan_id: number;
+  subject_name: string;
+  subject_icon: string;
+  subject_color: string;
+  total: number;
+  completed: number;
+  assignments: any[];
+}
 
 export default function AssignmentsScreen() {
   const router = useRouter();
-  const [filter, setFilter] = useState<'all' | 'pending' | 'submitted' | 'graded' | 'overdue'>('all');
+  const [subjects, setSubjects] = useState<SubjectGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredAssignments = filter === 'all' ? MOCK_ASSIGNMENTS : MOCK_ASSIGNMENTS.filter(a => a.status === filter);
-
-  const statusConfig = {
-    pending: { bg: '#FEF3C7', text: '#D97706', icon: 'time' as const, label: 'Pending' },
-    submitted: { bg: '#DBEAFE', text: '#2563EB', icon: 'paper-plane' as const, label: 'Submitted' },
-    graded: { bg: '#D1FAE5', text: '#059669', icon: 'checkmark-circle' as const, label: 'Graded' },
-    overdue: { bg: '#FEE2E2', text: '#DC2626', icon: 'alert-circle' as const, label: 'Overdue' },
+  const fetchAssignments = async () => {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/assignments/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSubjects(data.data || []);
+      }
+    } catch (e) {
+      console.error('Error fetching assignments:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
-  const priorityConfig = {
-    high: { color: '#EF4444', label: 'High' },
-    medium: { color: '#F59E0B', label: 'Medium' },
-    low: { color: '#10B981', label: 'Low' },
-  };
+  useFocusEffect(
+    useCallback(() => {
+      fetchAssignments();
+    }, [])
+  );
 
-  const pendingCount = MOCK_ASSIGNMENTS.filter(a => a.status === 'pending').length;
-  const overdueCount = MOCK_ASSIGNMENTS.filter(a => a.status === 'overdue').length;
+  const totalAssignments = subjects.reduce((s, g) => s + g.total, 0);
+  const totalCompleted = subjects.reduce((s, g) => s + g.completed, 0);
+  const pendingCount = totalAssignments - totalCompleted;
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.headerBg}>
-        <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.headerTop}>
+          <TouchableOpacity
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+            style={styles.backBtn}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.headerTitle}>Assignments</Text>
-        <Text style={styles.headerSubtitle}>{pendingCount} pending • {overdueCount} overdue</Text>
+        <Text style={styles.headerSubtitle}>
+          {totalAssignments} total • {pendingCount} pending • {totalCompleted} completed
+        </Text>
 
-        {/* Filter Chips */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
-          {(['all', 'pending', 'submitted', 'graded', 'overdue'] as const).map((f) => (
-            <TouchableOpacity
-              key={f}
-              style={[styles.filterChip, filter === f && styles.filterChipActive]}
-              onPress={() => setFilter(f)}
-            >
-              <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* Summary chips */}
+        <View style={styles.summaryRow}>
+          <View style={[styles.summaryCard, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+            <Ionicons name="library-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.summaryValue}>{subjects.length}</Text>
+            <Text style={styles.summaryLabel}>Subjects</Text>
+          </View>
+          <View style={[styles.summaryCard, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+            <Ionicons name="document-text-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.summaryValue}>{totalAssignments}</Text>
+            <Text style={styles.summaryLabel}>Tasks</Text>
+          </View>
+          <View style={[styles.summaryCard, { backgroundColor: 'rgba(255,255,255,0.20)' }]}>
+            <Ionicons name="checkmark-done-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.summaryValue}>{totalCompleted}</Text>
+            <Text style={styles.summaryLabel}>Done</Text>
+          </View>
+        </View>
       </View>
 
-      {/* Assignments List */}
-      <ScrollView style={styles.list} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
-        {filteredAssignments.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="clipboard-outline" size={56} color={Colors.text.placeholder} />
-            <Text style={styles.emptyText}>No assignments found</Text>
-          </View>
-        ) : (
-          filteredAssignments.map((assignment) => {
-            const status = statusConfig[assignment.status];
-            const priority = priorityConfig[assignment.priority];
-            return (
+      {/* Content */}
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>Loading assignments...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.list}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 30 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAssignments(); }} />
+          }
+        >
+          {subjects.length === 0 ? (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="clipboard-outline" size={56} color={Colors.text.placeholder} />
+              </View>
+              <Text style={styles.emptyTitle}>No assignments yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Generate a study plan and assignments will appear here automatically
+              </Text>
               <TouchableOpacity
-                key={assignment.id}
-                style={styles.assignmentCard}
+                style={styles.emptyBtn}
+                onPress={() => router.push('/(tabs)/study')}
                 activeOpacity={0.7}
-                onPress={() => Alert.alert(assignment.title, `Course: ${assignment.course}\nDue: ${assignment.dueDate}\nPriority: ${priority.label}\n\n${assignment.description}${assignment.grade ? `\n\nGrade: ${assignment.grade}/${assignment.maxGrade}` : ''}`)}
               >
-                {/* Priority indicator */}
-                <View style={[styles.priorityStrip, { backgroundColor: priority.color }]} />
-
-                <View style={styles.cardBody}>
-                  <View style={styles.cardTop}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.assignmentTitle}>{assignment.title}</Text>
-                      <Text style={styles.assignmentCourse}>{assignment.course}</Text>
-                    </View>
-                    <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-                      <Ionicons name={status.icon} size={12} color={status.text} />
-                      <Text style={[styles.statusText, { color: status.text }]}>{status.label}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.cardBottom}>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="calendar" size={14} color={Colors.text.secondary} />
-                      <Text style={[styles.metaText, assignment.status === 'overdue' && { color: '#EF4444', fontWeight: '600' }]}>
-                        {assignment.dueDate}
-                      </Text>
-                    </View>
-                    <View style={styles.metaItem}>
-                      <View style={[styles.priorityDot, { backgroundColor: priority.color }]} />
-                      <Text style={styles.metaText}>{priority.label} Priority</Text>
-                    </View>
-                    {assignment.grade && (
-                      <View style={styles.metaItem}>
-                        <Ionicons name="ribbon" size={14} color="#10B981" />
-                        <Text style={[styles.metaText, { color: '#10B981', fontWeight: '600' }]}>{assignment.grade}/{assignment.maxGrade}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
+                <Ionicons name="add-circle" size={20} color="#FFFFFF" />
+                <Text style={styles.emptyBtnText}>Create Study Plan</Text>
               </TouchableOpacity>
-            );
-          })
-        )}
-      </ScrollView>
+            </View>
+          ) : (
+            subjects.map((subject) => {
+              const progress = subject.total > 0 ? subject.completed / subject.total : 0;
+              const pending = subject.total - subject.completed;
+              return (
+                <TouchableOpacity
+                  key={subject.plan_id}
+                  style={styles.subjectCard}
+                  activeOpacity={0.7}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/subject-assignments',
+                      params: {
+                        planId: String(subject.plan_id),
+                        subjectName: subject.subject_name,
+                        subjectIcon: subject.subject_icon,
+                        subjectColor: subject.subject_color,
+                      },
+                    })
+                  }
+                >
+                  {/* Color accent */}
+                  <View style={[styles.subjectAccent, { backgroundColor: subject.subject_color }]} />
+
+                  <View style={styles.subjectBody}>
+                    <View style={styles.subjectTop}>
+                      <View style={[styles.subjectIconCircle, { backgroundColor: `${subject.subject_color}15` }]}>
+                        <Ionicons
+                          name={(subject.subject_icon || 'book') as any}
+                          size={24}
+                          color={subject.subject_color}
+                        />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                        <Text style={styles.subjectName}>{subject.subject_name}</Text>
+                        <Text style={styles.subjectMeta}>
+                          {subject.total} assignment{subject.total !== 1 ? 's' : ''} •{' '}
+                          {pending > 0 ? (
+                            <Text style={{ color: '#F59E0B', fontWeight: '600' }}>{pending} pending</Text>
+                          ) : (
+                            <Text style={{ color: '#10B981', fontWeight: '600' }}>All done!</Text>
+                          )}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={Colors.text.placeholder} />
+                    </View>
+
+                    {/* Progress bar */}
+                    <View style={styles.progressBarBg}>
+                      <View
+                        style={[
+                          styles.progressBarFill,
+                          {
+                            width: `${Math.round(progress * 100)}%`,
+                            backgroundColor: subject.subject_color,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {subject.completed}/{subject.total} completed ({Math.round(progress * 100)}%)
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
+  headerBg: {
+    backgroundColor: '#F59E0B',
+    paddingTop: Platform.OS === 'ios' ? 54 : (StatusBar.currentHeight || 30) + 10,
+    paddingBottom: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    ...Shadows.large,
+  },
+  headerTop: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.sm },
   backBtn: {
     width: 40,
     height: 40,
@@ -150,32 +232,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
   },
-  headerBg: {
-    backgroundColor: '#F59E0B',
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    ...Shadows.large,
-  },
-  headerTitle: { fontSize: 24, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
+  headerTitle: { fontSize: 26, fontWeight: '700', color: '#FFFFFF', marginBottom: 4 },
   headerSubtitle: { fontSize: 14, color: 'rgba(255,255,255,0.85)', marginBottom: Spacing.md },
-  filterRow: { flexDirection: 'row', marginTop: Spacing.sm },
-  filterChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 8,
-    borderRadius: BorderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    marginRight: Spacing.sm,
+  summaryRow: { flexDirection: 'row', gap: Spacing.sm },
+  summaryCard: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.lg,
   },
-  filterChipActive: { backgroundColor: '#FFFFFF' },
-  filterText: { fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.9)' },
-  filterTextActive: { color: '#D97706' },
+  summaryValue: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', marginTop: 2 },
+  summaryLabel: { fontSize: 11, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
+
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: Spacing.md, fontSize: 14, color: Colors.text.secondary },
+
   list: { flex: 1, paddingHorizontal: Spacing.lg, paddingTop: Spacing.lg },
-  assignmentCard: {
+
+  subjectCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderRadius: BorderRadius.xl,
@@ -183,17 +258,40 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...Shadows.medium,
   },
-  priorityStrip: { width: 5 },
-  cardBody: { flex: 1, padding: Spacing.md },
-  cardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: Spacing.sm },
-  assignmentTitle: { fontSize: 16, fontWeight: '600', color: Colors.text.primary, marginBottom: 2 },
-  assignmentCourse: { fontSize: 13, color: Colors.text.secondary },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
-  statusText: { fontSize: 11, fontWeight: '700', marginLeft: 4, letterSpacing: 0.3 },
-  cardBottom: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.md },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { fontSize: 12, color: Colors.text.secondary },
-  priorityDot: { width: 8, height: 8, borderRadius: 4 },
-  emptyState: { alignItems: 'center', justifyContent: 'center', padding: Spacing.xxl * 2 },
-  emptyText: { fontSize: 16, fontWeight: '500', color: Colors.text.secondary, marginTop: Spacing.md },
+  subjectAccent: { width: 5 },
+  subjectBody: { flex: 1, padding: Spacing.md },
+  subjectTop: { flexDirection: 'row', alignItems: 'center' },
+  subjectIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  subjectName: { fontSize: 17, fontWeight: '600', color: Colors.text.primary },
+  subjectMeta: { fontSize: 13, color: Colors.text.secondary, marginTop: 2 },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 3,
+    marginTop: Spacing.md,
+    overflow: 'hidden',
+  },
+  progressBarFill: { height: 6, borderRadius: 3 },
+  progressText: { fontSize: 12, color: Colors.text.secondary, marginTop: 4 },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: Spacing.xxl * 2 },
+  emptyIcon: { marginBottom: Spacing.md },
+  emptyTitle: { fontSize: 20, fontWeight: '600', color: Colors.text.primary, marginBottom: 6 },
+  emptySubtitle: { fontSize: 14, color: Colors.text.secondary, textAlign: 'center', paddingHorizontal: Spacing.xl, marginBottom: Spacing.lg },
+  emptyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.primary,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm + 2,
+    borderRadius: BorderRadius.full,
+  },
+  emptyBtnText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
 });

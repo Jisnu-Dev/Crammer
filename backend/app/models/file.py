@@ -1,7 +1,7 @@
 """
 File model for storing uploaded documents (notes, syllabus, etc.)
 """
-from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, BigInteger, Text, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 import enum
 from app.models.base_model import BaseModel
@@ -42,6 +42,10 @@ class File(Base, BaseModel):
     # Optional metadata
     title = Column(String(255), nullable=True)
     description = Column(String(1000), nullable=True)
+    subject = Column(String(255), nullable=True)  # Link file to a subject
+    
+    # Extracted text content (for AI context)
+    extracted_text = Column(Text, nullable=True)
     
     # User relationship
     uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=False)

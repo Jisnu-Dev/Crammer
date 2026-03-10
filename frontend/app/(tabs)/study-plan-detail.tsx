@@ -94,6 +94,45 @@ export default function StudyPlanDetailScreen() {
     }
   };
 
+  const toggleTopicStatus = async (topicId: number, currentStatus: string) => {
+    const newStatus = currentStatus === 'completed' ? 'not-started' : 'completed';
+
+    // Optimistic update — change local state immediately
+    setWeekPlans((prev) =>
+      prev.map((week) => ({
+        ...week,
+        topics: week.topics.map((t) =>
+          t.id === topicId ? { ...t, status: newStatus as StudyTopic['status'] } : t
+        ),
+      }))
+    );
+
+    // Persist to backend
+    try {
+      const token = await getAccessToken();
+      if (!token || !planId) return;
+      await fetch(`${API_BASE_URL}/study-plans/${planId}/topics/${topicId}/status`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (error) {
+      console.error('Error updating topic status:', error);
+      // Revert on failure
+      setWeekPlans((prev) =>
+        prev.map((week) => ({
+          ...week,
+          topics: week.topics.map((t) =>
+            t.id === topicId ? { ...t, status: currentStatus as StudyTopic['status'] } : t
+          ),
+        }))
+      );
+    }
+  };
+
   // Calculate stats
   const allTopics = weekPlans.flatMap((w) => w.topics);
   const completed = allTopics.filter((t) => t.status === 'completed').length;
@@ -195,21 +234,42 @@ export default function StudyPlanDetailScreen() {
               week.topics.map((topic, tIdx) => {
                 const statusCfg = statusConfig[topic.status];
                 const isExpanded = expandedTopic === topic.id;
+                const isCompleted = topic.status === 'completed';
                 return (
-                  <TouchableOpacity
+                  <View
                     key={topic.id}
                     style={[styles.topicCard, tIdx === week.topics.length - 1 && { marginBottom: 0 }]}
-                    activeOpacity={0.7}
-                    onPress={() => setExpandedTopic(isExpanded ? null : topic.id)}
                   >
                     {/* Status indicator line */}
                     <View style={[styles.topicStatusLine, { backgroundColor: statusCfg.color }]} />
 
                     <View style={styles.topicMain}>
                       <View style={styles.topicHeader}>
-                        <Ionicons name={statusCfg.icon} size={20} color={statusCfg.color} />
-                        <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-                          <Text style={styles.topicTitle}>{topic.title}</Text>
+                        {/* Checkmark toggle */}
+                        <TouchableOpacity
+                          onPress={() => toggleTopicStatus(topic.id, topic.status)}
+                          activeOpacity={0.6}
+                          style={[
+                            styles.checkBtn,
+                            isCompleted && { backgroundColor: '#10B981' },
+                          ]}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          {isCompleted ? (
+                            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                          ) : (
+                            <Ionicons name="ellipse-outline" size={22} color={Colors.text.placeholder} />
+                          )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={{ flex: 1, marginLeft: Spacing.sm }}
+                          activeOpacity={0.7}
+                          onPress={() => setExpandedTopic(isExpanded ? null : topic.id)}
+                        >
+                          <Text style={[styles.topicTitle, isCompleted && styles.topicTitleDone]}>
+                            {topic.title}
+                          </Text>
                           <View style={styles.topicChips}>
                             <View style={[styles.chip, { backgroundColor: `${difficultyColors[topic.difficulty]}18` }]}>
                               <Text style={[styles.chipText, { color: difficultyColors[topic.difficulty] }]}>
@@ -223,13 +283,61 @@ export default function StudyPlanDetailScreen() {
                             <View style={[styles.chip, { backgroundColor: `${statusCfg.color}18` }]}>
                               <Text style={[styles.chipText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
                             </View>
+                            <TouchableOpacity
+                              style={styles.learnChip}
+                              activeOpacity={0.7}
+                              onPress={() =>
+                                router.push({
+                                  pathname: '/(tabs)/topic-chat',
+                                  params: {
+                                    planId: planId!,
+                                    topicId: String(topic.id),
+                                    topicTitle: topic.title,
+                                    subjectName,
+                                    subjectColor,
+                                    keyPoints: JSON.stringify(topic.key_points || []),
+                                    resources: JSON.stringify(topic.resources || []),
+                                  },
+                                })
+                              }
+                            >
+                              <Ionicons name="chatbubble-ellipses" size={12} color="#FFFFFF" />
+                              <Text style={styles.learnChipText}>Learn</Text>
+                            </TouchableOpacity>
+                            {isCompleted && (
+                              <TouchableOpacity
+                                style={styles.quizChip}
+                                activeOpacity={0.7}
+                                onPress={() =>
+                                  router.push({
+                                    pathname: '/(tabs)/topic-quiz',
+                                    params: {
+                                      planId: planId!,
+                                      topicId: String(topic.id),
+                                      topicTitle: topic.title,
+                                      subjectColor,
+                                      subjectName,
+                                    },
+                                  })
+                                }
+                              >
+                                <Ionicons name="help-circle" size={12} color="#FFFFFF" />
+                                <Text style={styles.quizChipText}>Quiz</Text>
+                              </TouchableOpacity>
+                            )}
                           </View>
-                        </View>
-                        <Ionicons
-                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                          size={16}
-                          color={Colors.text.placeholder}
-                        />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          onPress={() => setExpandedTopic(isExpanded ? null : topic.id)}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons
+                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                            size={16}
+                            color={Colors.text.placeholder}
+                          />
+                        </TouchableOpacity>
                       </View>
 
                       {/* Expanded details */}
@@ -255,7 +363,7 @@ export default function StudyPlanDetailScreen() {
                         </View>
                       )}
                     </View>
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
           </View>
@@ -372,6 +480,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   topicTitle: { fontSize: 15, fontWeight: '600', color: Colors.text.primary, marginBottom: 4 },
+  topicTitleDone: { textDecorationLine: 'line-through', color: Colors.text.placeholder },
+  checkBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   topicChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   chip: {
     flexDirection: 'row',
@@ -383,6 +499,26 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
   },
   chipText: { fontSize: 11, fontWeight: '600', color: Colors.text.secondary },
+  quizChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  quizChipText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
+  learnChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.full,
+  },
+  learnChipText: { fontSize: 11, fontWeight: '700', color: '#FFFFFF' },
   topicDetails: {
     marginTop: Spacing.md,
     paddingTop: Spacing.md,

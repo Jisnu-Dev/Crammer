@@ -127,5 +127,44 @@ class StudyPlanService:
         logger.info(f"Study plan deleted: {plan_id}")
         return True
 
+    @staticmethod
+    def update_topic_status(db: Session, plan_id: int, user_id: int, topic_id: int, new_status: str) -> StudyPlan:
+        """Update the status of a specific topic within a study plan's plan_data JSON"""
+        plan = (
+            db.query(StudyPlan)
+            .filter(StudyPlan.id == plan_id, StudyPlan.user_id == user_id)
+            .first()
+        )
+        if not plan:
+            raise NotFoundException("Study plan not found")
+
+        # Deep copy plan_data to modify
+        import copy
+        updated_data = copy.deepcopy(plan.plan_data)
+        topic_found = False
+
+        for week in updated_data:
+            for topic in week.get('topics', []):
+                if topic.get('id') == topic_id:
+                    topic['status'] = new_status
+                    topic_found = True
+                    break
+            if topic_found:
+                break
+
+        if not topic_found:
+            raise NotFoundException(f"Topic with id {topic_id} not found in plan")
+
+        # Reassign to trigger SQLAlchemy change detection on JSON column
+        plan.plan_data = updated_data
+
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(plan, "plan_data")
+
+        db.commit()
+        db.refresh(plan)
+        logger.info(f"Topic {topic_id} in plan {plan_id} updated to '{new_status}'")
+        return plan
+
 
 study_plan_service = StudyPlanService()

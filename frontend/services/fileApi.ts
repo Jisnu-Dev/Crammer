@@ -35,6 +35,8 @@ export interface FileMetadata {
   category: string;
   title?: string;
   description?: string;
+  subject?: string;
+  has_extracted_text?: boolean;
   uploaded_by: number;
   created_at: string;
   updated_at: string;
@@ -67,7 +69,8 @@ class FileApiService {
     },
     category: string = 'other',
     title?: string,
-    description?: string
+    description?: string,
+    subject?: string
   ): Promise<UploadFileResponse> {
     const token = await getAccessToken();
     if (!token) {
@@ -98,6 +101,9 @@ class FileApiService {
       }
       if (description) {
         formData.append('description', description);
+      }
+      if (subject) {
+        formData.append('subject', subject);
       }
 
       console.log('FormData prepared, sending request...');

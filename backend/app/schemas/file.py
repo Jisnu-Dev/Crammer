@@ -19,11 +19,21 @@ class FileUploadResponse(BaseSchema):
     category: str
     title: Optional[str] = None
     description: Optional[str] = None
+    subject: Optional[str] = None
+    has_extracted_text: bool = False
     uploaded_by: int
     created_at: datetime
     
     class Config:
         from_attributes = True
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        if hasattr(obj, 'extracted_text'):
+            obj_dict = {c.key: getattr(obj, c.key) for c in obj.__table__.columns}
+            obj_dict['has_extracted_text'] = bool(obj.extracted_text)
+            return super().model_validate(obj_dict, **kwargs)
+        return super().model_validate(obj, **kwargs)
 
 
 class FileListResponse(BaseSchema):
@@ -37,12 +47,22 @@ class FileListResponse(BaseSchema):
     category: str
     title: Optional[str] = None
     description: Optional[str] = None
+    subject: Optional[str] = None
+    has_extracted_text: bool = False
     uploaded_by: int
     created_at: datetime
     updated_at: datetime
     
     class Config:
         from_attributes = True
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):
+        if hasattr(obj, 'extracted_text'):
+            obj_dict = {c.key: getattr(obj, c.key) for c in obj.__table__.columns}
+            obj_dict['has_extracted_text'] = bool(obj.extracted_text)
+            return super().model_validate(obj_dict, **kwargs)
+        return super().model_validate(obj, **kwargs)
 
 
 class FileUpdateRequest(BaseSchema):
@@ -51,3 +71,4 @@ class FileUpdateRequest(BaseSchema):
     title: Optional[str] = Field(None, max_length=255)
     description: Optional[str] = Field(None, max_length=1000)
     category: Optional[str] = Field(None, pattern="^(notes|syllabus|assignment|resource|other)$")
+    subject: Optional[str] = Field(None, max_length=255)

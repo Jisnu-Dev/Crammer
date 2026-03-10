@@ -1,14 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Animated, Dimensions } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Animated, Dimensions, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../../contexts/AuthContext';
-import { Card } from '../../components/common/Card';
-import { StatCard } from '../../components/common/StatCard';
 import { CustomButton } from '../../components/common/CustomButton';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/styles/theme';
+import { getAccessToken } from '../../utils/auth';
 
 const { width } = Dimensions.get('window');
+
+const getBaseUrl = () => {
+  if (__DEV__) {
+    if (Platform.OS === 'android') return 'http://10.123.11.99:8000/api/v1';
+    return 'http://localhost:8000/api/v1';
+  }
+  return 'https://your-production-api.com/api/v1';
+};
+const API_BASE_URL = getBaseUrl();
+
+interface DashboardStats {
+  study_hours: number;
+  total_plans: number;
+  total_topics: number;
+  completed_topics: number;
+  topic_progress: number;
+  total_assignments: number;
+  completed_assignments: number;
+  pending_assignments: number;
+  total_files: number;
+  recent_activity: ActivityItem[];
+}
+
+interface ActivityItem {
+  icon: string;
+  color: string;
+  title: string;
+  description: string;
+  time: string;
+}
 
 export default function HomeScreen() {
   const { user, logout } = useAuth();
@@ -16,11 +46,32 @@ export default function HomeScreen() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchDashboardStats = async () => {
+    try {
+      const token = await getAccessToken();
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/dashboard/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStats(data.data);
+      }
+    } catch (e) {
+      console.error('Dashboard stats error:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     
-    // Entrance animations
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -37,6 +88,12 @@ export default function HomeScreen() {
     
     return () => clearInterval(timer);
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchDashboardStats();
+    }, [])
+  );
 
   const getGreeting = () => {
     const hour = currentTime.getHours();
@@ -84,17 +141,10 @@ export default function HomeScreen() {
     const routeMap: Record<string, string> = {
       'Study Materials': '/(tabs)/files',
       'Resources': '/(tabs)/files',
-      'Study Sessions': '/(tabs)/sessions',
-      'Schedule Session': '/(tabs)/sessions',
-      'My Courses': '/(tabs)/courses',
-      'Course Catalog': '/(tabs)/courses',
       'Assignments': '/(tabs)/assignments',
-      'Feedback': '/(tabs)/assignments',
       'Analytics': '/(tabs)/analytics',
       'Study Assistant': '/(tabs)/study',
       'Study Plans': '/(tabs)/study-plans',
-      'My Students': '/(tabs)/sessions',
-      'User Management': '/(tabs)/profile',
       'Settings': '/(tabs)/settings',
     };
     const route = routeMap[feature];
@@ -108,137 +158,48 @@ export default function HomeScreen() {
   if (!user) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.greeting}>Loading...</Text>
+        <ActivityIndicator size="large" color={Colors.primary} />
       </View>
     );
   }
 
   const userName = user.full_name.split(' ')[0];
-  const userRole = user.role;
+  const s = stats;
 
-  // Role-specific stats
-  const getRoleStats = () => {
-    switch (userRole) {
-      case 'student':
-        return {
-          stat1: { title: 'Study Hours', value: '24', icon: 'time' as const, color: Colors.primary, trend: 'up' as const, trendValue: '+12%' },
-          stat2: { title: 'Courses', value: '5', icon: 'book' as const, color: Colors.success, trend: 'up' as const, trendValue: '+2' },
-          stat3: { title: 'Assignments', value: '8', icon: 'document-text' as const, color: Colors.warning, trend: 'neutral' as const, trendValue: '2 due' },
-          stat4: { title: 'Progress', value: '78%', icon: 'trending-up' as const, color: Colors.info, trend: 'up' as const, trendValue: '+5%' },
-        };
-      case 'mentor':
-        return {
-          stat1: { title: 'Students', value: '32', icon: 'people' as const, color: Colors.primary, trend: 'up' as const, trendValue: '+5' },
-          stat2: { title: 'Sessions', value: '18', icon: 'calendar' as const, color: Colors.success, trend: 'up' as const, trendValue: '+3' },
-          stat3: { title: 'Reviews', value: '4.8', icon: 'star' as const, color: Colors.warning, trend: 'up' as const, trendValue: '+0.2' },
-          stat4: { title: 'Hours', value: '45', icon: 'time' as const, color: Colors.info, trend: 'up' as const, trendValue: '+8h' },
-        };
-      case 'admin':
-        return {
-          stat1: { title: 'Total Users', value: '245', icon: 'people' as const, color: Colors.primary, trend: 'up' as const, trendValue: '+15' },
-          stat2: { title: 'Active Courses', value: '24', icon: 'book' as const, color: Colors.success, trend: 'neutral' as const, trendValue: 'Stable' },
-          stat3: { title: 'Sessions', value: '156', icon: 'calendar' as const, color: Colors.warning, trend: 'up' as const, trendValue: '+12' },
-          stat4: { title: 'Revenue', value: '$12k', icon: 'cash' as const, color: Colors.info, trend: 'up' as const, trendValue: '+8%' },
-        };
-      default:
-        return {
-          stat1: { title: 'Activity', value: '0', icon: 'pulse' as const, color: Colors.primary, trend: 'neutral' as const, trendValue: '-' },
-          stat2: { title: 'Tasks', value: '0', icon: 'checkbox' as const, color: Colors.success, trend: 'neutral' as const, trendValue: '-' },
-          stat3: { title: 'Progress', value: '0%', icon: 'trending-up' as const, color: Colors.warning, trend: 'neutral' as const, trendValue: '-' },
-          stat4: { title: 'Points', value: '0', icon: 'trophy' as const, color: Colors.info, trend: 'neutral' as const, trendValue: '-' },
-        };
-    }
-  };
+  // Quick actions
+  const quickActions = [
+    { title: 'Assignments', description: 'Check pending assignments and submit work', icon: 'clipboard' as const, color: '#F59E0B', action: 'Assignments' },
+    { title: 'Study Materials', description: 'Access notes, PDFs, and resources', icon: 'folder' as const, color: '#3B82F6', action: 'Study Materials' },
+    { title: 'Study Assistant', description: 'Chat with AI to study smarter', icon: 'chatbubble-ellipses' as const, color: '#8B5CF6', action: 'Study Assistant' },
+    { title: 'Study Plans', description: 'Follow structured plans for each subject', icon: 'map' as const, color: '#14B8A6', action: 'Study Plans' },
+  ];
 
-  // Role-specific quick actions
-  const getRoleQuickActions = () => {
-    switch (userRole) {
-      case 'student':
-        return [
-          { title: 'Join Study Session', description: 'Connect with peers and mentors', icon: 'people' as const, color: Colors.primary, action: 'Study Sessions' },
-          { title: 'My Courses', description: 'View and manage your enrolled courses', icon: 'book' as const, color: Colors.success, action: 'My Courses' },
-          { title: 'Assignments', description: 'Check pending assignments and submit work', icon: 'clipboard' as const, color: Colors.warning, action: 'Assignments' },
-          { title: 'Study Materials', description: 'Access notes, videos, and resources', icon: 'folder' as const, color: Colors.info, action: 'Study Materials' },
-          { title: 'Study Assistant', description: 'Chat with AI to study smarter', icon: 'chatbubble-ellipses' as const, color: '#8B5CF6', action: 'Study Assistant' },
-          { title: 'Study Plans', description: 'Follow structured plans for each subject', icon: 'map' as const, color: '#14B8A6', action: 'Study Plans' },
-        ];
-      case 'mentor':
-        return [
-          { title: 'Schedule Session', description: 'Create a new mentoring session', icon: 'calendar' as const, color: Colors.primary, action: 'Schedule Session' },
-          { title: 'My Students', description: 'View and manage your mentees', icon: 'people' as const, color: Colors.success, action: 'My Students' },
-          { title: 'Feedback', description: 'Review student submissions', icon: 'chatbubbles' as const, color: Colors.warning, action: 'Feedback' },
-          { title: 'Resources', description: 'Upload study materials for students', icon: 'cloud-upload' as const, color: Colors.info, action: 'Resources' },
-        ];
-      case 'admin':
-        return [
-          { title: 'User Management', description: 'Manage students, mentors, and admins', icon: 'people-circle' as const, color: Colors.primary, action: 'User Management' },
-          { title: 'Course Catalog', description: 'Create and manage courses', icon: 'library' as const, color: Colors.success, action: 'Course Catalog' },
-          { title: 'Analytics', description: 'View platform statistics and reports', icon: 'stats-chart' as const, color: Colors.warning, action: 'Analytics' },
-          { title: 'Settings', description: 'Configure platform settings', icon: 'settings' as const, color: Colors.info, action: 'Settings' },
-        ];
-      default:
-        return [];
-    }
-  };
-
-  // Recent activity data based on role
-  const getRecentActivity = () => {
-    switch (userRole) {
-      case 'student':
-        return [
-          { icon: 'checkmark-circle' as const, color: Colors.success, title: 'Completed Assignment', description: 'Mathematics - Chapter 5 Quiz', time: '2 hours ago' },
-          { icon: 'book' as const, color: Colors.info, title: 'Enrolled in Course', description: 'Advanced Physics', time: '1 day ago' },
-          { icon: 'people' as const, color: Colors.primary, title: 'Joined Study Group', description: 'Chemistry Study Session', time: '2 days ago' },
-        ];
-      case 'mentor':
-        return [
-          { icon: 'chatbubbles' as const, color: Colors.success, title: 'Provided Feedback', description: 'Reviewed 5 student submissions', time: '1 hour ago' },
-          { icon: 'calendar' as const, color: Colors.info, title: 'Session Completed', description: 'Biology Study Group', time: '3 hours ago' },
-          { icon: 'star' as const, color: Colors.warning, title: 'Received Review', description: '5-star rating from student', time: '1 day ago' },
-        ];
-      case 'admin':
-        return [
-          { icon: 'person-add' as const, color: Colors.success, title: 'New User Registered', description: '3 new students joined today', time: '30 mins ago' },
-          { icon: 'book' as const, color: Colors.info, title: 'Course Updated', description: 'Advanced Mathematics syllabus', time: '2 hours ago' },
-          { icon: 'trending-up' as const, color: Colors.primary, title: 'Platform Growth', description: '+15% user engagement this week', time: '1 day ago' },
-        ];
-      default:
-        return [];
-    }
-  };
-
-  const roleStats = getRoleStats();
-  const quickActions = getRoleQuickActions();
-  const recentActivity = getRecentActivity();
+  const recentActivity = s?.recent_activity || [];
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Professional Header with Blue Background */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchDashboardStats(); }} colors={['#2563EB']} />
+        }
+      >
+        {/* Header */}
         <View style={styles.professionalHeader}>
           <Animated.View 
             style={[
               styles.headerContent,
-              {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }]
-              }
+              { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
             ]}
           >
-            {/* Header Top */}
             <View style={styles.headerTop}>
               <View style={styles.greetingContainer}>
                 <Text style={styles.greeting}>{getGreeting()}</Text>
                 <Text style={styles.userName}>{userName}! 👋</Text>
-                
-                {/* Role Badge */}
                 <View style={styles.roleBadge}>
-                  <Ionicons 
-                    name={userRole === 'student' ? 'school' : userRole === 'mentor' ? 'people' : 'shield-checkmark'} 
-                    size={14} 
-                    color="#FFFFFF" 
-                  />
-                  <Text style={styles.roleText}>{userRole.charAt(0).toUpperCase() + userRole.slice(1)}</Text>
+                  <Ionicons name="school" size={14} color="#FFFFFF" />
+                  <Text style={styles.roleText}>Student</Text>
                 </View>
               </View>
               
@@ -252,7 +213,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Motivational Quote Card */}
+            {/* Quote */}
             <View style={styles.quoteCard}>
               <Ionicons name="bulb" size={20} color="#F59E0B" style={styles.quoteIcon} />
               <View style={styles.quoteContent}>
@@ -263,57 +224,79 @@ export default function HomeScreen() {
           </Animated.View>
         </View>
 
-        {/* Stats Overview - Enhanced Design */}
+        {/* Stats Grid */}
         <Animated.View 
-          style={[
-            styles.statsSection,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}
+          style={[styles.statsSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
         >
-          <View style={styles.statsGrid}>
-            <EnhancedStatCard
-              title={roleStats.stat1.title}
-              value={roleStats.stat1.value}
-              icon={roleStats.stat1.icon}
-              iconColor="#FFFFFF"
-              trend={roleStats.stat1.trend}
-              trendValue={roleStats.stat1.trendValue}
-              bgColor="#2563EB"
-            />
-            <EnhancedStatCard
-              title={roleStats.stat2.title}
-              value={roleStats.stat2.value}
-              icon={roleStats.stat2.icon}
-              iconColor="#FFFFFF"
-              trend={roleStats.stat2.trend}
-              trendValue={roleStats.stat2.trendValue}
-              bgColor="#10B981"
-            />
-          </View>
+          {loading ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={Colors.primary} />
+            </View>
+          ) : (
+            <>
+              <View style={styles.statsGrid}>
+                <EnhancedStatCard
+                  title="Study Hours"
+                  value={String(s?.study_hours ?? 0)}
+                  icon="time"
+                  iconColor="#FFFFFF"
+                  trend="neutral"
+                  trendValue={`${s?.total_plans ?? 0} plans`}
+                  bgColor="#2563EB"
+                />
+                <EnhancedStatCard
+                  title="Subjects"
+                  value={String(s?.total_plans ?? 0)}
+                  icon="book"
+                  iconColor="#FFFFFF"
+                  trend="up"
+                  trendValue={`${s?.total_topics ?? 0} topics`}
+                  bgColor="#10B981"
+                />
+              </View>
+              <View style={styles.statsGrid}>
+                <EnhancedStatCard
+                  title="Assignments"
+                  value={String(s?.total_assignments ?? 0)}
+                  icon="document-text"
+                  iconColor="#FFFFFF"
+                  trend={s?.pending_assignments ? 'neutral' : 'up'}
+                  trendValue={s?.pending_assignments ? `${s.pending_assignments} pending` : 'All done!'}
+                  bgColor="#F59E0B"
+                />
+                <EnhancedStatCard
+                  title="Progress"
+                  value={`${s?.topic_progress ?? 0}%`}
+                  icon="trending-up"
+                  iconColor="#FFFFFF"
+                  trend={(s?.topic_progress ?? 0) > 0 ? 'up' : 'neutral'}
+                  trendValue={`${s?.completed_topics ?? 0}/${s?.total_topics ?? 0}`}
+                  bgColor="#8B5CF6"
+                />
+              </View>
 
-          <View style={styles.statsGrid}>
-            <EnhancedStatCard
-              title={roleStats.stat3.title}
-              value={roleStats.stat3.value}
-              icon={roleStats.stat3.icon}
-              iconColor="#FFFFFF"
-              trend={roleStats.stat3.trend}
-              trendValue={roleStats.stat3.trendValue}
-              bgColor="#F59E0B"
-            />
-            <EnhancedStatCard
-              title={roleStats.stat4.title}
-              value={roleStats.stat4.value}
-              icon={roleStats.stat4.icon}
-              iconColor="#FFFFFF"
-              trend={roleStats.stat4.trend}
-              trendValue={roleStats.stat4.trendValue}
-              bgColor="#8B5CF6"
-            />
-          </View>
+              {/* Files & Assignments mini row */}
+              <View style={styles.miniStatsRow}>
+                <TouchableOpacity style={styles.miniStat} onPress={() => handleFeaturePress('Study Materials')}>
+                  <View style={[styles.miniStatDot, { backgroundColor: '#3B82F6' }]} />
+                  <Text style={styles.miniStatValue}>{s?.total_files ?? 0}</Text>
+                  <Text style={styles.miniStatLabel}>Files Uploaded</Text>
+                </TouchableOpacity>
+                <View style={styles.miniStatDivider} />
+                <TouchableOpacity style={styles.miniStat} onPress={() => handleFeaturePress('Assignments')}>
+                  <View style={[styles.miniStatDot, { backgroundColor: '#10B981' }]} />
+                  <Text style={styles.miniStatValue}>{s?.completed_assignments ?? 0}</Text>
+                  <Text style={styles.miniStatLabel}>Tasks Done</Text>
+                </TouchableOpacity>
+                <View style={styles.miniStatDivider} />
+                <TouchableOpacity style={styles.miniStat} onPress={() => handleFeaturePress('Study Plans')}>
+                  <View style={[styles.miniStatDot, { backgroundColor: '#8B5CF6' }]} />
+                  <Text style={styles.miniStatValue}>{s?.completed_topics ?? 0}</Text>
+                  <Text style={styles.miniStatLabel}>Topics Done</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </Animated.View>
 
         {/* Quick Actions */}
@@ -358,17 +341,17 @@ export default function HomeScreen() {
               {recentActivity.map((activity, index) => (
                 <View key={index} style={styles.activityCard}>
                   <View style={[styles.activityIconWrapper, { backgroundColor: `${activity.color}15` }]}>
-                    <Ionicons name={activity.icon} size={22} color={activity.color} />
+                    <Ionicons name={activity.icon as any} size={22} color={activity.color} />
                   </View>
                   <View style={styles.activityContent}>
                     <Text style={styles.activityTitle}>{activity.title}</Text>
-                    <Text style={styles.activityDescription}>{activity.description}</Text>
+                    <Text style={styles.activityDescription} numberOfLines={1}>{activity.description}</Text>
                     <View style={styles.activityTimeContainer}>
                       <Ionicons name="time-outline" size={12} color={Colors.text.secondary} />
                       <Text style={styles.activityTime}>{activity.time}</Text>
                     </View>
                   </View>
-                  <View style={styles.activityDot} />
+                  <View style={[styles.activityDot, { backgroundColor: activity.color }]} />
                 </View>
               ))}
             </View>
@@ -376,12 +359,12 @@ export default function HomeScreen() {
             <View style={styles.emptyActivity}>
               <Ionicons name="calendar-outline" size={48} color={Colors.text.placeholder} />
               <Text style={styles.emptyActivityText}>No recent activity</Text>
-              <Text style={styles.emptyActivitySubtext}>Your activities will appear here</Text>
+              <Text style={styles.emptyActivitySubtext}>Create a study plan to get started!</Text>
             </View>
           )}
         </View>
 
-        {/* Logout Button */}
+        {/* Logout */}
         <View style={styles.logoutContainer}>
           <CustomButton
             title="Logout"
@@ -606,6 +589,42 @@ const styles = StyleSheet.create({
     fontWeight: Typography.fontWeight.medium as any,
   },
   
+  // Mini Stats Row
+  miniStatsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.md,
+    ...Shadows.medium,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  miniStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  miniStatDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  miniStatValue: {
+    fontSize: 20,
+    fontWeight: Typography.fontWeight.bold as any,
+    color: Colors.text.primary,
+    marginBottom: 2,
+  },
+  miniStatLabel: {
+    fontSize: Typography.fontSize.xs,
+    color: Colors.text.secondary,
+  },
+  miniStatDivider: {
+    width: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 4,
+  },
+
   // Section Styles
   section: {
     marginTop: Spacing.xl,

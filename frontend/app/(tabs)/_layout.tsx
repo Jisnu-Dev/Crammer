@@ -26,6 +26,9 @@ export default function TabsLayout() {
       <Stack.Screen name="study" options={{ title: 'Study Assistant' }} />
       <Stack.Screen name="study-plans" options={{ title: 'Study Plans' }} />
       <Stack.Screen name="study-plan-detail" options={{ title: 'Study Plan Detail' }} />
+      <Stack.Screen name="topic-quiz" options={{ title: 'Topic Quiz' }} />
+      <Stack.Screen name="topic-chat" options={{ title: 'Topic Chat' }} />
+      <Stack.Screen name="subject-assignments" options={{ title: 'Subject Assignments' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
     </Stack>
   );

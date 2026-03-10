@@ -11,6 +11,7 @@ import {
   Animated,
   Dimensions,
   StatusBar,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -114,6 +115,38 @@ const MarkdownText = ({ text, isUser }: { text: string; isUser: boolean }) => {
     return parts;
   };
 
+  const renderTable = (tableLines: string[]) => {
+    const parseRow = (row: string) => row.split('|').map(c => c.trim()).filter(c => c !== '');
+    const headers = parseRow(tableLines[0]);
+    const dataRows = tableLines.slice(2).map(parseRow);
+    const headerBg = isUser ? 'rgba(255,255,255,0.18)' : '#EEF2FF';
+    const rowBg = isUser ? 'rgba(255,255,255,0.06)' : '#FAFBFF';
+    const altRowBg = isUser ? 'rgba(255,255,255,0.10)' : '#F3F6FF';
+    const borderColor = isUser ? 'rgba(255,255,255,0.2)' : '#E2E8F0';
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} key={`tbl${key++}`} style={{ marginVertical: 6 }}>
+        <View style={{ borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor }}>
+          <View style={{ flexDirection: 'row', backgroundColor: headerBg }}>
+            {headers.map((h, ci) => (
+              <View key={`th${ci}`} style={{ paddingHorizontal: 14, paddingVertical: 10, minWidth: 90, borderRightWidth: ci < headers.length - 1 ? 1 : 0, borderRightColor: borderColor }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: baseColor }}>{renderInlineMarkdown(h, baseColor)}</Text>
+              </View>
+            ))}
+          </View>
+          {dataRows.map((row, ri) => (
+            <View key={`tr${ri}`} style={{ flexDirection: 'row', backgroundColor: ri % 2 === 0 ? rowBg : altRowBg, borderTopWidth: 1, borderTopColor: borderColor }}>
+              {row.map((cell, ci) => (
+                <View key={`td${ri}_${ci}`} style={{ paddingHorizontal: 14, paddingVertical: 9, minWidth: 90, borderRightWidth: ci < row.length - 1 ? 1 : 0, borderRightColor: borderColor }}>
+                  <Text style={{ fontSize: 13, color: baseColor, lineHeight: 18 }}>{renderInlineMarkdown(cell, baseColor)}</Text>
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+    );
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
@@ -161,6 +194,21 @@ const MarkdownText = ({ text, isUser }: { text: string; isUser: boolean }) => {
       elements.push(<View key={`sp${key++}`} style={{ height: 8 }} />);
       continue;
     }
+
+    // Table detection: | col | col | followed by |---|---|
+    if (line.trim().startsWith('|') && i + 1 < lines.length && /^\|?[\s-:|]+\|/.test(lines[i + 1].trim())) {
+      const tableLines: string[] = [line];
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim().startsWith('|')) {
+        tableLines.push(lines[j]);
+        j++;
+      }
+      elements.push(renderTable(tableLines));
+      i = j - 1;
+      continue;
+    }
+    // Skip separator-only lines that may be leftover
+    if (/^\|?[\s-:|]+\|$/.test(line.trim())) continue;
 
     // Headings (### , ## , # )
     const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
@@ -531,8 +579,8 @@ export default function StudyScreen() {
       {/* Chat Area */}
       <KeyboardAvoidingView
         style={styles.chatContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         <FlatList
           ref={flatListRef}

@@ -2,7 +2,7 @@
 API v1 router that combines all route modules
 """
 from fastapi import APIRouter
-from .routes import health, auth, files, chat, study_plans
+from .routes import health, auth, files, chat, study_plans, topic_chat, assignments, dashboard
 
 api_router = APIRouter()
 
@@ -35,6 +35,24 @@ api_router.include_router(
     study_plans.router,
     prefix="/study-plans",
     tags=["Study Plans"]
+)
+
+api_router.include_router(
+    topic_chat.router,
+    prefix="/study-plans",
+    tags=["Topic Chat"]
+)
+
+api_router.include_router(
+    assignments.router,
+    prefix="/assignments",
+    tags=["Assignments"]
+)
+
+api_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",
+    tags=["Dashboard"]
 )
 
 # Add more routers as you create them

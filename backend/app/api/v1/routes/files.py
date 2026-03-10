@@ -30,6 +30,7 @@ async def upload_file(
     category: str = Form("other"),
     title: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
+    subject: Optional[str] = Form(None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -47,6 +48,7 @@ async def upload_file(
         logger.info(f"Filename: {file.filename}")
         logger.info(f"Content Type: {file.content_type}")
         logger.info(f"Category: {category}")
+        logger.info(f"Subject: {subject}")
         logger.info(f"Title: {title}")
         logger.info(f"Description: {description}")
         
@@ -61,7 +63,8 @@ async def upload_file(
             user_id=current_user.id,
             category=category,
             title=title,
-            description=description
+            description=description,
+            subject=subject
         )
         
         logger.info(f"File uploaded successfully: {uploaded_file.id}")
@@ -173,7 +176,8 @@ async def update_file(
             user_id=current_user.id,
             title=update_data.title,
             description=update_data.description,
-            category=update_data.category
+            category=update_data.category,
+            subject=update_data.subject
         )
         
         file_response = FileListResponse.model_validate(updated_file)
@@ -219,3 +223,30 @@ async def delete_file(
     except Exception as e:
         logger.error(f"Error deleting file: {str(e)}")
         raise
+
+
+@router.get(
+    "/context",
+    status_code=status.HTTP_200_OK,
+    summary="Get file context for AI",
+    description="Get extracted text from user files for AI context injection"
+)
+async def get_file_context(
+    subject: Optional[str] = None,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Return combined extracted text for AI context"""
+    try:
+        context_text = file_service.get_user_file_context(
+            db=db,
+            user_id=current_user.id,
+            subject=subject,
+        )
+        return {
+            "success": True,
+            "data": {"context": context_text, "has_content": bool(context_text)},
+        }
+    except Exception as e:
+        logger.error(f"Error getting file context: {str(e)}")
+        return {"success": True, "data": {"context": "", "has_content": False}}

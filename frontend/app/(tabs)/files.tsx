@@ -13,17 +13,18 @@ import {
   Linking,
   Dimensions,
   Platform,
+  StatusBar,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { CustomButton } from '../../components/common/CustomButton';
 import { CustomDropdown, DropdownOption } from '../../components/common/CustomDropdown';
-import { CustomInput } from '../../components/common/CustomInput';
-import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/styles/theme';
+import { Colors } from '../../constants/styles/theme';
 import { fileApiService, FileMetadata } from '../../services/fileApi';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRouter } from 'expo-router';
 
 const categoryOptions: DropdownOption[] = [
   { label: 'Notes', value: 'notes' },
@@ -35,26 +36,30 @@ const categoryOptions: DropdownOption[] = [
 
 export default function FilesScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [files, setFiles] = useState<FileMetadata[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [filterCategory, setFilterCategory] = useState<string>('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [uploadCategory, setUploadCategory] = useState<string>('notes');
   const [uploadTitle, setUploadTitle] = useState<string>('');
   const [uploadDescription, setUploadDescription] = useState<string>('');
+  const [uploadSubject, setUploadSubject] = useState<string>('');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<any>(null);
   const [viewingFile, setViewingFile] = useState<FileMetadata | null>(null);
   const [showFileViewer, setShowFileViewer] = useState(false);
+  const [showPickerMenu, setShowPickerMenu] = useState(false);
 
   useEffect(() => {
     loadFiles();
-  }, [filterCategory]);
+  }, []);
 
   const loadFiles = async () => {
     try {
       setLoading(true);
-      const response = await fileApiService.listFiles(filterCategory || undefined);
+      const response = await fileApiService.listFiles();
       if (response.success) {
         setFiles(response.data);
       }
@@ -63,8 +68,13 @@ export default function FilesScreen() {
       Alert.alert('Error', error.message || 'Failed to load files');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  const filteredFiles = filterCategory === 'all'
+    ? files
+    : files.filter(f => f.category === filterCategory);
 
   const pickDocument = async () => {
     try {
@@ -251,7 +261,8 @@ export default function FilesScreen() {
         selectedFile,
         uploadCategory,
         uploadTitle.trim(),
-        uploadDescription.trim()
+        uploadDescription.trim(),
+        uploadSubject.trim() || undefined
       );
       
       console.log('Upload response:', response);
@@ -262,6 +273,7 @@ export default function FilesScreen() {
         setUploadTitle('');
         setUploadDescription('');
         setUploadCategory('notes');
+        setUploadSubject('');
         await loadFiles();
       } else {
         throw new Error(response.message || 'Upload failed');
@@ -345,10 +357,8 @@ export default function FilesScreen() {
   };
 
   const getFileUrl = (file: FileMetadata): string => {
-    // Use the same network IP detection as api.ts
-    const LOCAL_IP = '10.61.19.201'; // Your computer's local network IP
     const baseUrl = Platform.OS === 'android' 
-      ? `http://${LOCAL_IP}:8000` 
+      ? `http://10.123.11.99:8000` 
       : 'http://localhost:8000';
     return `${baseUrl}/uploads/${file.stored_filename}`;
   };
@@ -368,99 +378,232 @@ export default function FilesScreen() {
     }
   };
 
+  const pdfCount = files.filter(f => f.file_type === 'pdf').length;
+  const aiReadyCount = files.filter(f => f.has_extracted_text).length;
+
+  const filterChips = [
+    { label: 'All', value: 'all' },
+    { label: 'Notes', value: 'notes' },
+    { label: 'Syllabus', value: 'syllabus' },
+    { label: 'Assignment', value: 'assignment' },
+    { label: 'Resource', value: 'resource' },
+    { label: 'Other', value: 'other' },
+  ];
+
+  const getFileIconColor = (fileType: string) => {
+    switch (fileType) {
+      case 'pdf': return '#EF4444';
+      case 'image': return '#8B5CF6';
+      case 'document': return '#3B82F6';
+      default: return '#6B7280';
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'notes': return '#3B82F6';
+      case 'syllabus': return '#8B5CF6';
+      case 'assignment': return '#F59E0B';
+      case 'resource': return '#10B981';
+      default: return '#6B7280';
+    }
+  };
+
   return (
     <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#6366F1" />
+
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>My Files</Text>
-        <Text style={styles.subtitle}>Upload and manage your study materials</Text>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.headerTitle}>Study Materials</Text>
+            <Text style={styles.headerSubtitle}>Upload & manage your files</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.headerIconBtn}
+            onPress={() => loadFiles()}
+          >
+            <Ionicons name="refresh-outline" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.statsRow}>
+          <View style={styles.statBadge}>
+            <Ionicons name="folder-outline" size={14} color="#fff" />
+            <Text style={styles.statText}>{files.length} Files</Text>
+          </View>
+          <View style={styles.statBadge}>
+            <Ionicons name="document-text-outline" size={14} color="#fff" />
+            <Text style={styles.statText}>{pdfCount} PDFs</Text>
+          </View>
+          <View style={[styles.statBadge, { backgroundColor: 'rgba(16,185,129,0.3)' }]}>
+            <Ionicons name="sparkles" size={14} color="#34D399" />
+            <Text style={[styles.statText, { color: '#34D399' }]}>{aiReadyCount} AI Ready</Text>
+          </View>
+        </View>
       </View>
 
-      {/* Upload Buttons */}
-      <View style={styles.uploadSection}>
-        <CustomButton
-          title="Pick Document"
-          onPress={pickDocument}
-          icon="document"
-          disabled={uploading}
-          style={styles.uploadButton}
-        />
-        <CustomButton
-          title="Pick Image"
-          onPress={pickImage}
-          icon="image"
-          variant="secondary"
-          disabled={uploading}
-          style={styles.uploadButton}
-        />
+      {/* Filter Chips */}
+      <View style={styles.chipContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+          {filterChips.map((chip) => (
+            <TouchableOpacity
+              key={chip.value}
+              style={[
+                styles.chip,
+                filterCategory === chip.value && styles.chipActive,
+              ]}
+              onPress={() => setFilterCategory(chip.value)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.chipText,
+                filterCategory === chip.value && styles.chipTextActive,
+              ]}>
+                {chip.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
-      {/* Filter */}
-      <View style={styles.filterSection}>
-        <CustomDropdown
-          label="Filter by Category"
-          placeholder="All Files"
-          value={filterCategory}
-          options={[{ label: 'All Files', value: '' }, ...categoryOptions]}
-          onSelect={setFilterCategory}
-          icon="filter"
-        />
-      </View>
-
-      {/* Files List */}
-      {loading ? (
+      {/* File List */}
+      {loading && !refreshing ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.loadingText}>Loading files...</Text>
         </View>
-      ) : files.length === 0 ? (
+      ) : filteredFiles.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Ionicons name="folder-open-outline" size={64} color={Colors.text.secondary} />
-          <Text style={styles.emptyText}>No files uploaded yet</Text>
-          <Text style={styles.emptySubtext}>Upload your first document or image</Text>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="folder-open-outline" size={56} color="#6366F1" />
+          </View>
+          <Text style={styles.emptyText}>
+            {files.length === 0 ? 'No study materials yet' : 'No files in this category'}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            {files.length === 0
+              ? 'Upload PDFs, docs, or images to get started.\nAI will use your files for smarter study help!'
+              : 'Try a different filter or upload more files.'}
+          </Text>
+          {files.length === 0 && (
+            <TouchableOpacity style={styles.emptyUploadBtn} onPress={() => setShowPickerMenu(true)}>
+              <Ionicons name="cloud-upload-outline" size={20} color="#fff" />
+              <Text style={styles.emptyUploadText}>Upload Files</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
-        <ScrollView style={styles.filesList} showsVerticalScrollIndicator={false}>
-          {files.map((file) => (
-            <TouchableOpacity 
-              key={file.id} 
+        <ScrollView
+          style={styles.filesList}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadFiles(); }} colors={['#6366F1']} />
+          }
+        >
+          {filteredFiles.map((file) => (
+            <TouchableOpacity
+              key={file.id}
               style={styles.fileCard}
               onPress={() => handleFilePress(file)}
               activeOpacity={0.7}
             >
-              <View style={[styles.fileIcon, { backgroundColor: `${Colors.primary}15` }]}>
+              <View style={[styles.fileIconBox, { backgroundColor: `${getFileIconColor(file.file_type)}15` }]}>
                 <Ionicons
                   name={getFileIcon(file.file_type) as any}
-                  size={24}
-                  color={Colors.primary}
+                  size={26}
+                  color={getFileIconColor(file.file_type)}
                 />
               </View>
               <View style={styles.fileInfo}>
                 <Text style={styles.fileName} numberOfLines={1}>
                   {file.title || file.original_filename}
                 </Text>
-                <View style={styles.fileMetaContainer}>
-                  <Text style={styles.fileMeta}>{file.category}</Text>
-                  <Text style={styles.fileMeta}>•</Text>
-                  <Text style={styles.fileMeta}>{formatFileSize(file.file_size)}</Text>
+                <View style={styles.fileTagRow}>
+                  <View style={[styles.categoryTag, { backgroundColor: `${getCategoryColor(file.category)}15` }]}>
+                    <Text style={[styles.categoryTagText, { color: getCategoryColor(file.category) }]}>
+                      {file.category}
+                    </Text>
+                  </View>
+                  {file.subject && (
+                    <View style={styles.subjectTag}>
+                      <Ionicons name="book-outline" size={10} color="#6366F1" />
+                      <Text style={styles.subjectTagText} numberOfLines={1}>{file.subject}</Text>
+                    </View>
+                  )}
+                  {file.has_extracted_text && (
+                    <View style={styles.aiBadge}>
+                      <Ionicons name="sparkles" size={10} color="#10B981" />
+                      <Text style={styles.aiBadgeText}>AI</Text>
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.fileDate}>
-                  {new Date(file.created_at).toLocaleDateString()}
-                </Text>
+                <View style={styles.fileMetaRow}>
+                  <Text style={styles.fileMeta}>{formatFileSize(file.file_size)}</Text>
+                  <Text style={styles.fileMetaDot}>·</Text>
+                  <Text style={styles.fileMeta}>{new Date(file.created_at).toLocaleDateString()}</Text>
+                </View>
               </View>
               <TouchableOpacity
-                style={styles.deleteButton}
+                style={styles.deleteBtn}
                 onPress={(e) => {
                   e.stopPropagation();
                   deleteFile(file.id, file.title || file.original_filename);
                 }}
               >
-                <Ionicons name="trash-outline" size={20} color={Colors.error} />
+                <Ionicons name="trash-outline" size={18} color={Colors.error} />
               </TouchableOpacity>
             </TouchableOpacity>
           ))}
+          <View style={{ height: 90 }} />
         </ScrollView>
       )}
+
+      {/* FAB Upload */}
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => setShowPickerMenu(true)}
+        activeOpacity={0.85}
+        disabled={uploading}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Picker Menu Modal */}
+      <Modal
+        visible={showPickerMenu}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPickerMenu(false)}
+      >
+        <TouchableOpacity
+          style={styles.pickerOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPickerMenu(false)}
+        >
+          <View style={styles.pickerMenu}>
+            <Text style={styles.pickerTitle}>Upload File</Text>
+            <TouchableOpacity style={styles.pickerOption} onPress={() => { setShowPickerMenu(false); pickDocument(); }}>
+              <View style={[styles.pickerIconBox, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="document-text-outline" size={24} color="#3B82F6" />
+              </View>
+              <View>
+                <Text style={styles.pickerOptionLabel}>Document</Text>
+                <Text style={styles.pickerOptionDesc}>PDF, Word, Text files</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.pickerOption} onPress={() => { setShowPickerMenu(false); pickImage(); }}>
+              <View style={[styles.pickerIconBox, { backgroundColor: '#F5F3FF' }]}>
+                <Ionicons name="image-outline" size={24} color="#8B5CF6" />
+              </View>
+              <View>
+                <Text style={styles.pickerOptionLabel}>Image</Text>
+                <Text style={styles.pickerOptionDesc}>Photos & screenshots</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Upload Modal */}
       <Modal
@@ -472,21 +615,36 @@ export default function FilesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Upload File</Text>
-              <TouchableOpacity onPress={handleUploadCancel}>
-                <Ionicons name="close" size={24} color={Colors.text.primary} />
+              <Text style={styles.modalTitle}>Upload Details</Text>
+              <TouchableOpacity onPress={handleUploadCancel} style={styles.modalCloseBtn}>
+                <Ionicons name="close" size={22} color={Colors.text.secondary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               {selectedFile && (
                 <View style={styles.filePreview}>
-                  <Ionicons name="document" size={32} color={Colors.primary} />
-                  <Text style={styles.fileName} numberOfLines={1}>
-                    {selectedFile.name}
-                  </Text>
+                  <View style={styles.filePreviewIcon}>
+                    <Ionicons name="document" size={28} color="#6366F1" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.filePreviewName} numberOfLines={1}>{selectedFile.name}</Text>
+                    <Text style={styles.filePreviewHint}>Ready to upload</Text>
+                  </View>
+                  <Ionicons name="checkmark-circle" size={22} color="#10B981" />
                 </View>
               )}
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Title *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={uploadTitle}
+                  onChangeText={setUploadTitle}
+                  placeholder="Enter file title"
+                  placeholderTextColor={Colors.text.secondary}
+                />
+              </View>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Category *</Text>
@@ -501,14 +659,19 @@ export default function FilesScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Title *</Text>
+                <Text style={styles.label}>
+                  <Ionicons name="sparkles" size={14} color="#6366F1" /> Subject (for AI context)
+                </Text>
                 <TextInput
                   style={styles.input}
-                  value={uploadTitle}
-                  onChangeText={setUploadTitle}
-                  placeholder="Enter file title"
+                  value={uploadSubject}
+                  onChangeText={setUploadSubject}
+                  placeholder="e.g. Mathematics, Physics..."
                   placeholderTextColor={Colors.text.secondary}
                 />
+                <Text style={styles.inputHint}>
+                  AI will use files matching this subject for study plans, quizzes & chat
+                </Text>
               </View>
 
               <View style={styles.inputGroup}>
@@ -517,28 +680,27 @@ export default function FilesScreen() {
                   style={[styles.input, styles.textArea]}
                   value={uploadDescription}
                   onChangeText={setUploadDescription}
-                  placeholder="Enter description"
+                  placeholder="Add a description..."
                   placeholderTextColor={Colors.text.secondary}
                   multiline
-                  numberOfLines={4}
+                  numberOfLines={3}
                   textAlignVertical="top"
                 />
               </View>
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <CustomButton
-                title="Cancel"
-                onPress={handleUploadCancel}
-                variant="outline"
-                style={styles.modalButton}
-              />
-              <CustomButton
-                title="Upload"
+              <TouchableOpacity style={styles.cancelBtn} onPress={handleUploadCancel}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.uploadBtn, !uploadTitle.trim() && { opacity: 0.5 }]}
                 onPress={handleUploadConfirm}
                 disabled={!uploadTitle.trim()}
-                style={styles.modalButton}
-              />
+              >
+                <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+                <Text style={styles.uploadBtnText}>Upload</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -554,29 +716,24 @@ export default function FilesScreen() {
         <View style={styles.viewerOverlay}>
           <View style={styles.viewerHeader}>
             <View style={styles.viewerHeaderContent}>
-              <Ionicons 
-                name={getFileIcon(viewingFile?.file_type || 'other') as any} 
-                size={24} 
-                color={Colors.textLight} 
+              <TouchableOpacity onPress={() => setShowFileViewer(false)} style={{ marginRight: 8 }}>
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </TouchableOpacity>
+              <Ionicons
+                name={getFileIcon(viewingFile?.file_type || 'other') as any}
+                size={22}
+                color="#fff"
               />
               <Text style={styles.viewerTitle} numberOfLines={1}>
                 {viewingFile?.title || viewingFile?.original_filename}
               </Text>
             </View>
-            <View style={styles.viewerActions}>
-              <TouchableOpacity
-                style={styles.viewerActionButton}
-                onPress={() => viewingFile && handleDownload(viewingFile)}
-              >
-                <Ionicons name="download-outline" size={24} color={Colors.textLight} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.viewerActionButton}
-                onPress={() => setShowFileViewer(false)}
-              >
-                <Ionicons name="close" size={24} color={Colors.textLight} />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.viewerActionButton}
+              onPress={() => viewingFile && handleDownload(viewingFile)}
+            >
+              <Ionicons name="download-outline" size={22} color="#fff" />
+            </TouchableOpacity>
           </View>
 
           <View style={styles.viewerContent}>
@@ -612,7 +769,6 @@ export default function FilesScreen() {
                   onError={(syntheticEvent) => {
                     const { nativeEvent } = syntheticEvent;
                     console.error('WebView error:', nativeEvent.description);
-                    // Fall back to download on error
                     Alert.alert(
                       'Cannot Preview PDF',
                       'Would you like to download the file instead?',
@@ -665,12 +821,13 @@ export default function FilesScreen() {
                 <Text style={styles.unsupportedText}>
                   Preview not available for this file type
                 </Text>
-                <CustomButton
-                  title="Download File"
-                  onPress={() => viewingFile && handleDownload(viewingFile)}
-                  icon="download"
+                <TouchableOpacity
                   style={styles.downloadButton}
-                />
+                  onPress={() => viewingFile && handleDownload(viewingFile)}
+                >
+                  <Ionicons name="download-outline" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '600', marginLeft: 8 }}>Download File</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -679,8 +836,10 @@ export default function FilesScreen() {
 
       {uploading && (
         <View style={styles.uploadingOverlay}>
-          <ActivityIndicator size="large" color={Colors.primary} />
-          <Text style={styles.uploadingText}>Uploading...</Text>
+          <View style={styles.uploadingBox}>
+            <ActivityIndicator size="large" color="#6366F1" />
+            <Text style={styles.uploadingText}>Uploading file...</Text>
+          </View>
         </View>
       )}
     </View>
@@ -690,221 +849,455 @@ export default function FilesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8FAFC',
   },
+  // Header
   header: {
-    padding: Spacing.lg,
-    paddingTop: Spacing.md,
+    backgroundColor: '#6366F1',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 54,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
   },
-  title: {
-    fontSize: Typography.fontSize.xxl,
-    fontWeight: Typography.fontWeight.bold as any,
-    color: Colors.text.primary,
-    marginBottom: Spacing.xs,
-  },
-  subtitle: {
-    fontSize: Typography.fontSize.md,
-    color: Colors.text.secondary,
-  },
-  uploadSection: {
+  headerTop: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
   },
-  uploadButton: {
-    flex: 1,
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#fff',
   },
-  filterSection: {
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.md,
+  headerSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 2,
   },
+  headerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  statBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    gap: 5,
+  },
+  statText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  // Filter Chips
+  chipContainer: {
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  chipScroll: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  chipActive: {
+    backgroundColor: '#6366F1',
+    borderColor: '#6366F1',
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  chipTextActive: {
+    color: '#fff',
+  },
+  // File List
   filesList: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: 16,
   },
   fileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
-    ...Shadows.small,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  fileIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: BorderRadius.md,
+  fileIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: Spacing.md,
+    marginRight: 12,
   },
   fileInfo: {
     flex: 1,
   },
   fileName: {
-    fontSize: Typography.fontSize.md,
-    fontWeight: Typography.fontWeight.semibold as any,
-    color: Colors.text.primary,
-    marginBottom: Spacing.xs,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 4,
   },
-  fileMetaContainer: {
+  fileTagRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    marginBottom: Spacing.xs,
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 4,
   },
-  fileMeta: {
-    fontSize: Typography.fontSize.sm,
-    color: Colors.text.secondary,
+  categoryTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  categoryTagText: {
+    fontSize: 11,
+    fontWeight: '600',
     textTransform: 'capitalize',
   },
-  fileDate: {
-    fontSize: Typography.fontSize.xs,
-    color: Colors.text.secondary,
+  subjectTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: '#EEF2FF',
+    gap: 3,
   },
-  deleteButton: {
-    padding: Spacing.sm,
+  subjectTagText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#6366F1',
+    maxWidth: 80,
   },
+  aiBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: '#ECFDF5',
+    gap: 3,
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#10B981',
+  },
+  fileMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fileMeta: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  fileMetaDot: {
+    fontSize: 11,
+    color: '#CBD5E1',
+    marginHorizontal: 5,
+  },
+  deleteBtn: {
+    padding: 8,
+    marginLeft: 4,
+  },
+  // Empty State
   centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing.xl,
+    padding: 32,
   },
-  loadingText: {
-    fontSize: Typography.fontSize.md,
-    color: Colors.text.secondary,
-    marginTop: Spacing.md,
+  emptyIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   emptyText: {
-    fontSize: Typography.fontSize.lg,
-    fontWeight: Typography.fontWeight.semibold as any,
-    color: Colors.text.primary,
-    marginTop: Spacing.md,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 8,
   },
   emptySubtext: {
-    fontSize: Typography.fontSize.md,
-    color: Colors.text.secondary,
-    marginTop: Spacing.xs,
+    fontSize: 14,
+    color: '#94A3B8',
     textAlign: 'center',
+    lineHeight: 20,
   },
-  uploadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  emptyUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 20,
+    gap: 8,
+  },
+  emptyUploadText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  loadingText: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginTop: 12,
+  },
+  // FAB
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  // Picker Menu
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  pickerMenu: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 36,
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 20,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 14,
+  },
+  pickerIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  uploadingText: {
-    fontSize: Typography.fontSize.lg,
-    color: Colors.textLight,
-    marginTop: Spacing.md,
+  pickerOptionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
   },
+  pickerOptionDesc: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginTop: 1,
+  },
+  // Upload Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: Colors.surface,
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    maxHeight: '80%',
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: Spacing.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: '#F1F5F9',
   },
   modalTitle: {
-    fontSize: Typography.fontSize.xl,
-    fontWeight: Typography.fontWeight.bold as any,
-    color: Colors.text.primary,
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalBody: {
-    padding: Spacing.lg,
+    padding: 20,
   },
   filePreview: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: `${Colors.primary}10`,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.lg,
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    borderRadius: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filePreviewIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  filePreviewName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  filePreviewHint: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 1,
   },
   inputGroup: {
-    marginBottom: Spacing.lg,
+    marginBottom: 18,
   },
   label: {
-    fontSize: Typography.fontSize.md,
-    fontWeight: Typography.fontWeight.semibold as any,
-    color: Colors.text.primary,
-    marginBottom: Spacing.sm,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 8,
   },
   input: {
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
-    fontSize: Typography.fontSize.md,
-    color: Colors.text.primary,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1E293B',
+  },
+  inputHint: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 5,
+    paddingLeft: 2,
   },
   textArea: {
-    minHeight: 100,
-    paddingTop: Spacing.md,
+    minHeight: 80,
+    paddingTop: 12,
   },
   modalFooter: {
     flexDirection: 'row',
-    gap: Spacing.sm,
-    padding: Spacing.lg,
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: '#F1F5F9',
   },
-  modalButton: {
+  cancelBtn: {
     flex: 1,
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
   },
-  // File Viewer Styles
+  cancelBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  uploadBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  uploadBtnText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  // File Viewer
   viewerOverlay: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#fff',
   },
   viewerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: Colors.primary,
-    paddingTop: Spacing.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
+    backgroundColor: '#6366F1',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 8 : 50,
+    paddingHorizontal: 16,
+    paddingBottom: 14,
   },
   viewerHeaderContent: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    marginRight: Spacing.md,
+    marginRight: 12,
   },
   viewerTitle: {
-    fontSize: Typography.fontSize.lg,
-    fontWeight: Typography.fontWeight.semibold as any,
-    color: Colors.textLight,
-    marginLeft: Spacing.sm,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    marginLeft: 8,
     flex: 1,
   },
-  viewerActions: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-  },
   viewerActionButton: {
-    padding: Spacing.sm,
+    padding: 8,
   },
   viewerContent: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8FAFC',
   },
   imageScrollContainer: {
     flexGrow: 1,
@@ -917,28 +1310,57 @@ const styles = StyleSheet.create({
   },
   webViewer: {
     flex: 1,
-    backgroundColor: Colors.background,
   },
   webViewLoading: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Colors.background,
+    backgroundColor: '#F8FAFC',
   },
   unsupportedView: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: Spacing.xl,
+    padding: 32,
   },
   unsupportedText: {
-    fontSize: Typography.fontSize.lg,
-    color: Colors.text.secondary,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.xl,
+    fontSize: 16,
+    color: '#94A3B8',
+    marginTop: 12,
+    marginBottom: 24,
     textAlign: 'center',
   },
   downloadButton: {
-    minWidth: 200,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  // Uploading Overlay
+  uploadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingBox: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 40,
+    paddingVertical: 30,
+    borderRadius: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  uploadingText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#334155',
+    marginTop: 14,
   },
 });

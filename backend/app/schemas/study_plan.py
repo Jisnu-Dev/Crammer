@@ -80,6 +80,18 @@ class StudyPlanDetailResponse(BaseModel):
     data: StudyPlanResponse
 
 
+class TopicStatusUpdateRequest(BaseModel):
+    """Request to update a topic's status"""
+    status: str = Field(..., pattern="^(completed|in-progress|not-started)$")
+
+
+class TopicStatusUpdateResponse(BaseModel):
+    """Response after updating a topic status"""
+    success: bool = True
+    message: str = "Topic status updated"
+    data: Optional[StudyPlanResponse] = None
+
+
 class StudyPlanCreateResponse(BaseModel):
     """Response after creating a study plan"""
     success: bool = True
