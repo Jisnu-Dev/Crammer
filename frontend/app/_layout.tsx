@@ -14,11 +14,19 @@ export default function RootLayout() {
     <AuthProvider>
       <ProtectedRoute>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: 'slide_from_right',
+              animationDuration: 250,
+              gestureEnabled: true,
+              gestureDirection: 'horizontal',
+            }}
+          >
+            <Stack.Screen name="index" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal', animation: 'slide_from_bottom' }} />
           </Stack>
           <StatusBar style="auto" />
         </ThemeProvider>

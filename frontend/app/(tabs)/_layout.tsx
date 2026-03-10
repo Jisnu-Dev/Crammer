@@ -1,21 +1,31 @@
 import { Stack } from 'expo-router';
 import React from 'react';
+import { Platform } from 'react-native';
 
 export default function TabsLayout() {
   return (
     <Stack
       screenOptions={{
-        gestureEnabled: false, // Disable swipe back to prevent going to auth screens
+        gestureEnabled: true,
+        headerShown: false,
+        animation: 'slide_from_right',
+        animationDuration: 250,
+        gestureDirection: 'horizontal',
+        ...(Platform.OS === 'ios' && {
+          fullScreenGestureEnabled: true,
+          customAnimationOnGesture: true,
+        }),
       }}
     >
-      <Stack.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          headerShown: true,
-          gestureEnabled: false,
-        }}
-      />
+      <Stack.Screen name="index" options={{ title: 'Home', gestureEnabled: false }} />
+      <Stack.Screen name="files" options={{ title: 'Files', headerShown: true }} />
+      <Stack.Screen name="profile" options={{ title: 'Profile' }} />
+      <Stack.Screen name="sessions" options={{ title: 'Study Sessions' }} />
+      <Stack.Screen name="courses" options={{ title: 'Courses' }} />
+      <Stack.Screen name="assignments" options={{ title: 'Assignments' }} />
+      <Stack.Screen name="analytics" options={{ title: 'Analytics' }} />
+      <Stack.Screen name="study" options={{ title: 'Study Assistant' }} />
+      <Stack.Screen name="settings" options={{ title: 'Settings' }} />
     </Stack>
   );
 }

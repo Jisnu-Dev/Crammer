@@ -6,7 +6,9 @@ export default function AuthLayout() {
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: '#FFFFFF' },
-        gestureEnabled: false, // Disable swipe back gesture
+        gestureEnabled: false,
+        animation: 'slide_from_right',
+        animationDuration: 250,
       }}
     >
       <Stack.Screen 

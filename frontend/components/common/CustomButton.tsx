@@ -7,7 +7,9 @@ import {
   TouchableOpacityProps,
   ViewStyle,
   TextStyle,
+  View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, BorderRadius, Typography, Shadows } from '../../constants/styles/theme';
 
 interface CustomButtonProps extends TouchableOpacityProps {
@@ -18,6 +20,7 @@ interface CustomButtonProps extends TouchableOpacityProps {
   loading?: boolean;
   disabled?: boolean;
   fullWidth?: boolean;
+  icon?: keyof typeof Ionicons.glyphMap;
 }
 
 export const CustomButton: React.FC<CustomButtonProps> = ({
@@ -28,6 +31,7 @@ export const CustomButton: React.FC<CustomButtonProps> = ({
   loading = false,
   disabled = false,
   fullWidth = true,
+  icon,
   style,
   ...props
 }) => {
@@ -61,7 +65,17 @@ export const CustomButton: React.FC<CustomButtonProps> = ({
           size="small"
         />
       ) : (
-        <Text style={textStyles}>{title}</Text>
+        <>
+          {icon && (
+            <Ionicons
+              name={icon}
+              size={20}
+              color={variant === 'outline' ? Colors.primary : Colors.textLight}
+              style={styles.icon}
+            />
+          )}
+          <Text style={textStyles}>{title}</Text>
+        </>
       )}
     </TouchableOpacity>
   );
@@ -139,5 +153,8 @@ const styles = StyleSheet.create({
   },
   textDisabled: {
     color: Colors.textSecondary,
+  },
+  icon: {
+    marginRight: Spacing.xs,
   },
 });

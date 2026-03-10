@@ -9,13 +9,19 @@ const getBaseUrl = () => {
   if (__DEV__) {
     // Development mode
     if (Platform.OS === 'android') {
-      // Android emulator needs 10.0.2.2 instead of localhost
-      return 'http://10.0.2.2:8000/api/v1';
+      // For Android physical device: use your computer's local network IP
+      // For Android emulator: use 10.0.2.2
+      // Update this IP to match your computer's IP address
+      const LOCAL_IP = '10.123.11.99'; // Replace with your computer's local IP
+      console.log('Platform detected: Android - Using local network IP:', LOCAL_IP);
+      return `http://${LOCAL_IP}:8000/api/v1`;
     } else if (Platform.OS === 'ios') {
       // iOS simulator can use localhost
+      console.log('Platform detected: iOS - Using localhost');
       return 'http://localhost:8000/api/v1';
     } else {
-      // Web
+      // Web or other platforms
+      console.log(`Platform detected: ${Platform.OS} - Using localhost`);
       return 'http://localhost:8000/api/v1';
     }
   }
@@ -24,6 +30,7 @@ const getBaseUrl = () => {
 };
 
 const API_BASE_URL = getBaseUrl();
+console.log('API Base URL configured as:', API_BASE_URL);
 
 interface ApiResponse<T> {
   success: boolean;
@@ -84,6 +91,9 @@ class ApiService {
   ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`;
     
+    console.log('Making API request to:', url);
+    console.log('Request options:', options);
+    
     const defaultHeaders = {
       'Content-Type': 'application/json',
     };
@@ -97,8 +107,11 @@ class ApiService {
     };
 
     try {
+      console.log('Fetching URL:', url);
       const response = await fetch(url, config);
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (!response.ok) {
         throw {
@@ -111,6 +124,11 @@ class ApiService {
       return data;
     } catch (error: any) {
       console.error('API Error:', error);
+      console.error('Error details:', {
+        message: error.message,
+        url: url,
+        endpoint: endpoint
+      });
       throw error;
     }
   }
