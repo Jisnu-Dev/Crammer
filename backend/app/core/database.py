@@ -66,7 +66,7 @@ def init_db() -> None:
     """Initialize database tables"""
     try:
         # Import all models to register them with Base
-        from app.models import User, UserRole
+        from app.models import User, UserRole, StudyPlan
         
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")

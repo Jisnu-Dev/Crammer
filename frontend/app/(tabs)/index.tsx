@@ -92,6 +92,7 @@ export default function HomeScreen() {
       'Feedback': '/(tabs)/assignments',
       'Analytics': '/(tabs)/analytics',
       'Study Assistant': '/(tabs)/study',
+      'Study Plans': '/(tabs)/study-plans',
       'My Students': '/(tabs)/sessions',
       'User Management': '/(tabs)/profile',
       'Settings': '/(tabs)/settings',
@@ -159,6 +160,7 @@ export default function HomeScreen() {
           { title: 'Assignments', description: 'Check pending assignments and submit work', icon: 'clipboard' as const, color: Colors.warning, action: 'Assignments' },
           { title: 'Study Materials', description: 'Access notes, videos, and resources', icon: 'folder' as const, color: Colors.info, action: 'Study Materials' },
           { title: 'Study Assistant', description: 'Chat with AI to study smarter', icon: 'chatbubble-ellipses' as const, color: '#8B5CF6', action: 'Study Assistant' },
+          { title: 'Study Plans', description: 'Follow structured plans for each subject', icon: 'map' as const, color: '#14B8A6', action: 'Study Plans' },
         ];
       case 'mentor':
         return [

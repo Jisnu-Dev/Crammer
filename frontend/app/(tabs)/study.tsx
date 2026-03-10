@@ -15,9 +15,27 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { getAccessToken } from '../../utils/auth';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/styles/theme';
 
 const { width } = Dimensions.get('window');
+
+// API Base URL (same logic as api.ts)
+const getBaseUrl = () => {
+  if (__DEV__) {
+    if (Platform.OS === 'android') {
+      const LOCAL_IP = '10.123.11.99';
+      return `http://${LOCAL_IP}:8000/api/v1`;
+    } else if (Platform.OS === 'ios') {
+      return 'http://localhost:8000/api/v1';
+    } else {
+      return 'http://localhost:8000/api/v1';
+    }
+  }
+  return 'https://your-production-api.com/api/v1';
+};
+
+const API_BASE_URL = getBaseUrl();
 
 interface Message {
   id: string;
@@ -25,6 +43,194 @@ interface Message {
   sender: 'user' | 'bot';
   timestamp: Date;
 }
+
+/**
+ * Lightweight markdown renderer for chat messages.
+ * Supports: **bold**, *italic*, `inline code`, code blocks, bullet/numbered lists, headings.
+ */
+const MarkdownText = ({ text, isUser }: { text: string; isUser: boolean }) => {
+  const baseColor = isUser ? Colors.textLight : Colors.text.primary;
+  const dimColor = isUser ? 'rgba(255,255,255,0.7)' : Colors.text.secondary;
+
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeBlockLines: string[] = [];
+  let key = 0;
+
+  const renderInlineMarkdown = (line: string, color: string) => {
+    // Split by markdown tokens: **bold**, *italic*, `code`
+    const parts: React.ReactNode[] = [];
+    const regex = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`)/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(line)) !== null) {
+      // Text before the match
+      if (match.index > lastIndex) {
+        parts.push(
+          <Text key={`t${key++}`} style={{ color }}>{line.slice(lastIndex, match.index)}</Text>
+        );
+      }
+      if (match[2]) {
+        // **bold**
+        parts.push(
+          <Text key={`b${key++}`} style={{ color, fontWeight: '700' }}>{match[2]}</Text>
+        );
+      } else if (match[3]) {
+        // *italic*
+        parts.push(
+          <Text key={`i${key++}`} style={{ color, fontStyle: 'italic' }}>{match[3]}</Text>
+        );
+      } else if (match[4]) {
+        // `inline code`
+        parts.push(
+          <Text
+            key={`c${key++}`}
+            style={{
+              color: isUser ? '#E0F0FF' : Colors.primary,
+              fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+              fontSize: Typography.fontSize.sm,
+              backgroundColor: isUser ? 'rgba(255,255,255,0.15)' : 'rgba(37,99,235,0.08)',
+              borderRadius: 3,
+              paddingHorizontal: 2,
+            }}
+          >
+            {match[4]}
+          </Text>
+        );
+      }
+      lastIndex = match.index + match[0].length;
+    }
+    // Remaining text
+    if (lastIndex < line.length) {
+      parts.push(
+        <Text key={`r${key++}`} style={{ color }}>{line.slice(lastIndex)}</Text>
+      );
+    }
+    if (parts.length === 0) {
+      parts.push(<Text key={`e${key++}`} style={{ color }}>{line}</Text>);
+    }
+    return parts;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Code block toggle
+    if (line.trimStart().startsWith('```')) {
+      if (inCodeBlock) {
+        // Close code block
+        elements.push(
+          <View
+            key={`cb${key++}`}
+            style={{
+              backgroundColor: isUser ? 'rgba(255,255,255,0.12)' : '#F3F4F6',
+              borderRadius: BorderRadius.md,
+              padding: Spacing.sm,
+              marginVertical: 4,
+            }}
+          >
+            <Text
+              style={{
+                fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                fontSize: Typography.fontSize.sm,
+                color: isUser ? '#E0F0FF' : Colors.text.primary,
+                lineHeight: Typography.fontSize.sm * 1.6,
+              }}
+            >
+              {codeBlockLines.join('\n')}
+            </Text>
+          </View>
+        );
+        codeBlockLines = [];
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      continue;
+    }
+
+    // Empty line = spacing
+    if (line.trim() === '') {
+      elements.push(<View key={`sp${key++}`} style={{ height: 8 }} />);
+      continue;
+    }
+
+    // Headings (### , ## , # )
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const sizes = [Typography.fontSize.xl, Typography.fontSize.lg, Typography.fontSize.md + 1];
+      elements.push(
+        <Text
+          key={`h${key++}`}
+          style={{
+            fontSize: sizes[level - 1],
+            fontWeight: '700',
+            color: baseColor,
+            marginTop: 6,
+            marginBottom: 2,
+          }}
+        >
+          {renderInlineMarkdown(headingMatch[2], baseColor)}
+        </Text>
+      );
+      continue;
+    }
+
+    // Bullet points (- or • or *)
+    const bulletMatch = line.match(/^(\s*)([-•*])\s+(.+)/);
+    if (bulletMatch) {
+      const indent = Math.floor(bulletMatch[1].length / 2);
+      elements.push(
+        <View key={`bl${key++}`} style={{ flexDirection: 'row', marginLeft: indent * 12, marginVertical: 2 }}>
+          <Text style={{ color: isUser ? 'rgba(255,255,255,0.6)' : Colors.primary, marginRight: 6, fontSize: Typography.fontSize.sm }}>•</Text>
+          <Text style={{ flex: 1, fontSize: Typography.fontSize.md, lineHeight: Typography.fontSize.md * Typography.lineHeight.normal, color: baseColor }}>
+            {renderInlineMarkdown(bulletMatch[3], baseColor)}
+          </Text>
+        </View>
+      );
+      continue;
+    }
+
+    // Numbered lists (1. , 2. , etc.)
+    const numberedMatch = line.match(/^(\s*)(\d+)[.)]\s+(.+)/);
+    if (numberedMatch) {
+      const indent = Math.floor(numberedMatch[1].length / 2);
+      elements.push(
+        <View key={`nl${key++}`} style={{ flexDirection: 'row', marginLeft: indent * 12, marginVertical: 2 }}>
+          <Text style={{ color: dimColor, marginRight: 6, fontSize: Typography.fontSize.sm, fontWeight: '600', minWidth: 18 }}>{numberedMatch[2]}.</Text>
+          <Text style={{ flex: 1, fontSize: Typography.fontSize.md, lineHeight: Typography.fontSize.md * Typography.lineHeight.normal, color: baseColor }}>
+            {renderInlineMarkdown(numberedMatch[3], baseColor)}
+          </Text>
+        </View>
+      );
+      continue;
+    }
+
+    // Regular paragraph
+    elements.push(
+      <Text
+        key={`p${key++}`}
+        style={{
+          fontSize: Typography.fontSize.md,
+          lineHeight: Typography.fontSize.md * Typography.lineHeight.normal,
+          color: baseColor,
+        }}
+      >
+        {renderInlineMarkdown(line, baseColor)}
+      </Text>
+    );
+  }
+
+  return <View>{elements}</View>;
+};
 
 const QUICK_PROMPTS = [
   { label: 'Explain a concept', icon: 'bulb-outline' as const, prompt: 'Can you explain ' },
@@ -77,59 +283,142 @@ export default function StudyScreen() {
     }, 100);
   };
 
-  const simulateBotResponse = (userMessage: string) => {
+  // Detect if user is asking for a study plan
+  const detectStudyPlanRequest = (message: string): string | null => {
+    const lower = message.toLowerCase();
+    // Patterns that indicate a study plan request
+    const patterns = [
+      /(?:create|make|generate|build|prepare|give me|design)\s+(?:a\s+)?(?:study\s+plan|studyplan|learning\s+plan|revision\s+plan)\s+(?:for|on|about|of)\s+(.+)/i,
+      /(?:study\s+plan|studyplan|learning\s+plan)\s+(?:for|on|about|of)\s+(.+)/i,
+      /(?:plan|schedule)\s+(?:for|to)\s+(?:study|learn|revise)\s+(.+)/i,
+      /(?:help me plan|plan my study|organize my study|organize study)\s+(?:for|on|of|in)\s+(.+)/i,
+    ];
+    for (const pattern of patterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        // Clean up the subject - remove trailing punctuation
+        return match[1].replace(/[?.!,;]+$/, '').trim();
+      }
+    }
+    // Fallback: if it mentions "study plan" and a subject-like word
+    if (lower.includes('study plan') || lower.includes('studyplan') || lower.includes('learning plan')) {
+      // Try to extract subject after common prepositions
+      const fallback = message.match(/(?:for|on|about|of|in)\s+(.{2,50}?)(?:\s*[?.!]?\s*$)/i);
+      if (fallback && fallback[1]) {
+        return fallback[1].replace(/[?.!,;]+$/, '').trim();
+      }
+    }
+    return null;
+  };
+
+  const generateStudyPlan = async (subject: string): Promise<boolean> => {
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const response = await fetch(`${API_BASE_URL}/study-plans/generate?subject=${encodeURIComponent(subject)}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      return data.success === true;
+    } catch (error) {
+      console.error('Study plan generation error:', error);
+      return false;
+    }
+  };
+
+  const sendToGemini = async (userMessage: string, allMessages: Message[]) => {
     setIsTyping(true);
     scrollToBottom();
 
-    // Simulated delay for bot "thinking"
-    const delay = 1000 + Math.random() * 1500;
-    setTimeout(() => {
-      const botResponses: Record<string, string> = {
-        default:
-          "That's a great question! I'm currently in demo mode, but once connected I'll be able to help you study any topic in depth. Try asking me to explain a concept, quiz you, or create a study plan!",
-      };
-
-      const lowerMsg = userMessage.toLowerCase();
-      let response = botResponses.default;
-
-      if (lowerMsg.includes('quiz')) {
-        response =
-          "📝 Sure! Let's do a quick quiz.\n\n**Question:** What is the time complexity of binary search?\n\nA) O(n)\nB) O(log n)\nC) O(n²)\nD) O(1)\n\nType the letter of your answer!";
-      } else if (lowerMsg.includes('explain')) {
-        response =
-          "📖 Great! I'd love to explain that.\n\nCould you tell me the specific concept or topic you'd like me to break down? For example:\n• A programming concept\n• A math theorem\n• A scientific principle\n• A historical event";
-      } else if (lowerMsg.includes('summarize') || lowerMsg.includes('summary')) {
-        response =
-          "📋 I can help summarize! Please share the topic or paste the text you'd like me to condense into key points.";
-      } else if (lowerMsg.includes('study plan') || lowerMsg.includes('schedule')) {
-        response =
-          "📅 Let's build a study plan!\n\nTo create an effective plan, I'll need:\n1. **Subject/Topic** — What are you studying?\n2. **Timeframe** — When is your exam/deadline?\n3. **Daily hours** — How many hours can you study per day?\n\nShare these details and I'll put together a personalized plan!";
-      } else if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('hey')) {
-        response = `Hey ${user?.full_name?.split(' ')[0] || 'there'}! 😊 Ready to study? Pick a topic or use one of the quick prompts to get started!`;
-      } else if (lowerMsg === 'b' || lowerMsg === 'b)') {
-        response =
-          "✅ **Correct!** Binary search has a time complexity of **O(log n)** because it halves the search space with each comparison.\n\nWant another question? Just say 'quiz me'!";
-      } else if (['a', 'c', 'd', 'a)', 'c)', 'd)'].includes(lowerMsg)) {
-        response =
-          "❌ Not quite. The correct answer is **B) O(log n)**. Binary search works by repeatedly dividing the sorted array in half.\n\nWant to try another question?";
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        throw new Error('Not authenticated');
       }
 
-      const botMessage: Message = {
+      // Check if this is a study plan request
+      const studyPlanSubject = detectStudyPlanRequest(userMessage);
+
+      if (studyPlanSubject) {
+        // Generate and save the study plan
+        const success = await generateStudyPlan(studyPlanSubject);
+
+        let replyText: string;
+        if (success) {
+          replyText = `**Study plan created for "${studyPlanSubject}"!** 🎉\n\nI've generated a comprehensive, week-by-week study plan and saved it for you.\n\n**To view your plan:**\n1. Go to **Study Plans** from the home screen\n2. Tap on **${studyPlanSubject}** to see all the weeks, topics, and resources\n\nThe plan includes:\n- Progressive difficulty (easy → hard)\n- Estimated study hours per topic\n- Key points to cover\n- Recommended resources\n\nWould you like me to explain any topic from the plan, or create a plan for another subject?`;
+        } else {
+          replyText = `I tried to generate a study plan for "${studyPlanSubject}" but something went wrong. Please try again in a moment.`;
+        }
+
+        const botMessage: Message = {
+          id: Date.now().toString(),
+          text: replyText,
+          sender: 'bot',
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, botMessage]);
+      } else {
+        // Regular chat — send to Gemini
+        const conversationHistory = allMessages
+          .filter((m) => m.id !== 'welcome')
+          .map((m) => ({
+            sender: m.sender === 'bot' ? 'model' : 'user',
+            text: m.text,
+          }));
+
+        const response = await fetch(`${API_BASE_URL}/chat/send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            message: userMessage,
+            conversation_history: conversationHistory,
+          }),
+        });
+
+        const data = await response.json();
+
+        let replyText: string;
+        if (data.success && data.data?.reply) {
+          replyText = data.data.reply;
+        } else {
+          replyText = data.message || "I couldn't generate a response. Please try again.";
+        }
+
+        const botMessage: Message = {
+          id: Date.now().toString(),
+          text: replyText,
+          sender: 'bot',
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, botMessage]);
+      }
+    } catch (error: any) {
+      console.error('Chat error:', error);
+      const errorMessage: Message = {
         id: Date.now().toString(),
-        text: response,
+        text: "Sorry, I'm having trouble connecting right now. Please check your connection and try again.",
         sender: 'bot',
         timestamp: new Date(),
       };
-
-      setMessages((prev) => [...prev, botMessage]);
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
       scrollToBottom();
-    }, delay);
+    }
   };
 
   const handleSend = () => {
     const trimmed = inputText.trim();
-    if (!trimmed) return;
+    if (!trimmed || isTyping) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -138,10 +427,11 @@ export default function StudyScreen() {
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const updatedMessages = [...messages, userMessage];
+    setMessages(updatedMessages);
     setInputText('');
     scrollToBottom();
-    simulateBotResponse(trimmed);
+    sendToGemini(trimmed, updatedMessages);
   };
 
   const handleQuickPrompt = (prompt: string) => {
@@ -172,9 +462,13 @@ export default function StudyScreen() {
             !isFirst && isUser && styles.userBubbleContinued,
           ]}
         >
-          <Text style={[styles.messageText, isUser ? styles.userMessageText : styles.botMessageText]}>
-            {item.text}
-          </Text>
+          {isUser ? (
+            <Text style={[styles.messageText, styles.userMessageText]}>
+              {item.text}
+            </Text>
+          ) : (
+            <MarkdownText text={item.text} isUser={false} />
+          )}
           <Text style={[styles.timestamp, isUser ? styles.userTimestamp : styles.botTimestamp]}>
             {formatTime(item.timestamp)}
           </Text>
@@ -288,9 +582,9 @@ export default function StudyScreen() {
               blurOnSubmit={false}
             />
             <TouchableOpacity
-              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              style={[styles.sendButton, (!inputText.trim() || isTyping) && styles.sendButtonDisabled]}
               onPress={handleSend}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || isTyping}
               activeOpacity={0.7}
             >
               <Ionicons

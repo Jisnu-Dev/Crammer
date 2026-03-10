@@ -5,5 +5,6 @@ Import all models here for easy access
 from app.core.database import Base
 from .user import User, UserRole
 from .file import File, FileType, FileCategory
+from .study_plan import StudyPlan
 
-__all__ = ["Base", "User", "UserRole", "File", "FileType", "FileCategory"]
+__all__ = ["Base", "User", "UserRole", "File", "FileType", "FileCategory", "StudyPlan"]

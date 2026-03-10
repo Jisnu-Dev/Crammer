@@ -18,9 +18,12 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               animation: 'slide_from_right',
-              animationDuration: 250,
+              animationDuration: 200,
               gestureEnabled: true,
               gestureDirection: 'horizontal',
+              contentStyle: { backgroundColor: '#FFFFFF' },
+              fullScreenGestureEnabled: true,
+              customAnimationOnGesture: true,
             }}
           >
             <Stack.Screen name="index" options={{ headerShown: false, animation: 'fade' }} />

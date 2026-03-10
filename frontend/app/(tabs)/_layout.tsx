@@ -9,12 +9,11 @@ export default function TabsLayout() {
         gestureEnabled: true,
         headerShown: false,
         animation: 'slide_from_right',
-        animationDuration: 250,
+        animationDuration: 200,
         gestureDirection: 'horizontal',
-        ...(Platform.OS === 'ios' && {
-          fullScreenGestureEnabled: true,
-          customAnimationOnGesture: true,
-        }),
+        contentStyle: { backgroundColor: '#FFFFFF' },
+        fullScreenGestureEnabled: true,
+        customAnimationOnGesture: true,
       }}
     >
       <Stack.Screen name="index" options={{ title: 'Home', gestureEnabled: false }} />
@@ -25,6 +24,8 @@ export default function TabsLayout() {
       <Stack.Screen name="assignments" options={{ title: 'Assignments' }} />
       <Stack.Screen name="analytics" options={{ title: 'Analytics' }} />
       <Stack.Screen name="study" options={{ title: 'Study Assistant' }} />
+      <Stack.Screen name="study-plans" options={{ title: 'Study Plans' }} />
+      <Stack.Screen name="study-plan-detail" options={{ title: 'Study Plan Detail' }} />
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
     </Stack>
   );
