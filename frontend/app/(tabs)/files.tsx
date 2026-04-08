@@ -22,6 +22,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { CustomDropdown, DropdownOption } from '../../components/common/CustomDropdown';
 import { Colors } from '../../constants/styles/theme';
+import { SERVER_BASE_URL } from '../../constants/api';
 import { fileApiService, FileMetadata } from '../../services/fileApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -357,10 +358,7 @@ export default function FilesScreen() {
   };
 
   const getFileUrl = (file: FileMetadata): string => {
-    const baseUrl = Platform.OS === 'android' 
-      ? `http://10.123.11.99:8000` 
-      : 'http://localhost:8000';
-    return `${baseUrl}/uploads/${file.stored_filename}`;
+    return `${SERVER_BASE_URL}/uploads/${file.stored_filename}`;
   };
 
   const handleDownload = async (file: FileMetadata) => {

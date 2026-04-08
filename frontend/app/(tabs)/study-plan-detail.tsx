@@ -15,15 +15,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getAccessToken } from '../../utils/auth';
 import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../constants/styles/theme';
 
-// API Base URL
-const getBaseUrl = () => {
-  if (__DEV__) {
-    if (Platform.OS === 'android') return `http://10.123.11.99:8000/api/v1`;
-    return 'http://localhost:8000/api/v1';
-  }
-  return 'https://your-production-api.com/api/v1';
-};
-const API_BASE_URL = getBaseUrl();
+import { API_BASE_URL } from '../../constants/api';
 
 interface StudyTopic {
   id: number;

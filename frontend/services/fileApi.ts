@@ -1,29 +1,8 @@
 /**
  * File upload API service
  */
-import { Platform } from 'react-native';
 import { getAccessToken } from '../utils/auth';
-
-const getBaseUrl = () => {
-  if (__DEV__) {
-    if (Platform.OS === 'android') {
-      // For Android physical device: use your computer's local network IP
-      const LOCAL_IP = '10.123.11.99'; // Replace with your computer's local IP
-      console.log('[FileAPI] Platform detected: Android - Using local network IP:', LOCAL_IP);
-      return `http://${LOCAL_IP}:8000/api/v1`;
-    } else if (Platform.OS === 'ios') {
-      console.log('[FileAPI] Platform detected: iOS - Using localhost');
-      return 'http://localhost:8000/api/v1';
-    } else {
-      console.log('[FileAPI] Platform detected:', Platform.OS, '- Using localhost');
-      return 'http://localhost:8000/api/v1';
-    }
-  }
-  return 'https://your-production-api.com/api/v1';
-};
-
-const API_BASE_URL = getBaseUrl();
-console.log('[FileAPI] API Base URL configured as:', API_BASE_URL);
+import { API_BASE_URL } from '../constants/api';
 
 export interface FileMetadata {
   id: number;

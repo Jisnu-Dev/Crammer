@@ -22,21 +22,7 @@ import { Colors, Spacing, Typography, BorderRadius, Shadows } from '../../consta
 const { width } = Dimensions.get('window');
 
 // API Base URL (same logic as api.ts)
-const getBaseUrl = () => {
-  if (__DEV__) {
-    if (Platform.OS === 'android') {
-      const LOCAL_IP = '10.123.11.99';
-      return `http://${LOCAL_IP}:8000/api/v1`;
-    } else if (Platform.OS === 'ios') {
-      return 'http://localhost:8000/api/v1';
-    } else {
-      return 'http://localhost:8000/api/v1';
-    }
-  }
-  return 'https://your-production-api.com/api/v1';
-};
-
-const API_BASE_URL = getBaseUrl();
+import { API_BASE_URL } from '../../constants/api';
 
 interface Message {
   id: string;
